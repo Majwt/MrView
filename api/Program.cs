@@ -1,5 +1,6 @@
 using api;
 using Microsoft.Data.SqlClient;
+using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,113 +41,100 @@ if (configuredSeenCountThreshold.Any(c => !char.IsDigit(c)))
     );
 }
 var safeTableName = QuoteMultipartIdentifier(configuredTableName);
-
-var getConnectionsSql = $"""
-    SELECT endpoint_a, endpoint_b, service_port,
-        host_name, pid, process_name, seen_count,
+var graphSelectSql = """
+    SELECT id, endpoint_a, endpoint_b, service_port,
+        pid, process_name, seen_count,
         source_fqdn, source_ip, source_port,
         source_pid, source_process_name,
         target_fqdn, target_ip, target_port,
         target_pid, target_process_name, last_seen
-    FROM {safeTableName} where seen_count > {configuredSeenCountThreshold}
+    """;
+var graphSnapshotSql = $"""
+    {graphSelectSql}
+    FROM {safeTableName}
+    WHERE seen_count > {configuredSeenCountThreshold}
+    ORDER BY last_seen ASC, id ASC
+    """;
+var graphDeltaSql = $"""
+    {graphSelectSql}
+    FROM {safeTableName}
+    WHERE seen_count > {configuredSeenCountThreshold}
+        AND (
+            last_seen > @since_last_seen
+            OR (last_seen = @since_last_seen AND id > @since_row_id)
+        )
+    ORDER BY last_seen ASC, id ASC
     """;
 
 app.MapGet("/", () => Results.Ok(new { status = "ok" }));
 
 app.MapGet(
-    "/api/graph",
-    async () =>
+    "/api/graph/snapshot",
+    async (CancellationToken cancellationToken) =>
     {
         var connectionString = builder.Configuration.GetConnectionString("Default");
 
         await using var conn = new SqlConnection(connectionString);
-        await conn.OpenAsync();
+        await conn.OpenAsync(cancellationToken);
 
-        var cmd = new SqlCommand(getConnectionsSql, conn);
+        await using var cmd = new SqlCommand(graphSnapshotSql, conn);
+        var (nodes, edges, cursor) = await ReadGraphQueryAsync(cmd, cancellationToken);
 
-        var nodes = new List<Node>();
-        var edges = new List<Edge>();
-        var seenNodes = new HashSet<string>();
+        return Results.Ok(new GraphSnapshotResponse(nodes, edges, cursor));
+    }
+);
 
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            if (
-                reader["source_fqdn"] is not string sourceFqdn
-                || reader["source_ip"] is not string sourceIp
-                || reader["target_fqdn"] is not string targetFqdn
-                || reader["target_ip"] is not string targetIp
-            )
-            {
-                continue;
-            }
+app.MapGet(
+    "/api/graph",
+    async (CancellationToken cancellationToken) =>
+    {
+        var connectionString = builder.Configuration.GetConnectionString("Default");
 
-            var processName = reader["process_name"] as string;
+        await using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync(cancellationToken);
 
-            var pid = reader["pid"] == DBNull.Value ? -1 : Convert.ToInt32(reader["pid"]);
-
-            var sourcePort =
-                reader["source_port"] == DBNull.Value ? 0 : Convert.ToInt32(reader["source_port"]);
-
-            var targetPort =
-                reader["target_port"] == DBNull.Value ? 0 : Convert.ToInt32(reader["target_port"]);
-
-            var seenCount =
-                reader["seen_count"] == DBNull.Value ? 1 : Convert.ToInt64(reader["seen_count"]);
-
-            var sourcePid =
-                reader["source_pid"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["source_pid"]);
-
-            var sourceProcessName = reader["source_process_name"] as string;
-
-            var targetPid =
-                reader["target_pid"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["target_pid"]);
-
-            var targetProcessName = reader["target_process_name"] as string;
-
-            var endpointA = reader["endpoint_a"] as string;
-            var endpointB = reader["endpoint_b"] as string;
-            var servicePort = reader["service_port"] == DBNull.Value
-                ? "0"
-                : Convert.ToInt32(reader["service_port"]).ToString();
-            var stableEdgeId = endpointA is null || endpointB is null
-                ? $"{sourceFqdn}:{sourcePort}->{targetFqdn}:{targetPort}"
-                : $"{endpointA}|{endpointB}|{servicePort}";
-            var lastSeen = reader["last_seen"] == DBNull.Value
-                ? DateTime.MinValue
-                : Convert.ToDateTime(reader["last_seen"]);
-
-            if (seenNodes.Add(sourceFqdn))
-            {
-                nodes.Add(new Node(sourceFqdn, sourceIp));
-            }
-
-            if (seenNodes.Add(targetFqdn))
-            {
-                nodes.Add(new Node(targetFqdn, targetIp));
-            }
-
-            edges.Add(
-                new Edge(
-                    Id: stableEdgeId,
-                    SourceIp: sourceIp,
-                    SourcePort: sourcePort,
-                    SourceFqdn: sourceFqdn,
-                    TargetIp: targetIp,
-                    TargetPort: targetPort,
-                    TargetFqdn: targetFqdn,
-                    Pid: pid,
-                    ProcessName: processName,
-                    SeenCount: seenCount,
-                    SourcePid: sourcePid,
-                    SourceProcessName: sourceProcessName,
-                    TargetPid: targetPid,
-                    TargetProcessName: targetProcessName,
-                    LastSeen: lastSeen
-                )
-            );
-        }
+        await using var cmd = new SqlCommand(graphSnapshotSql, conn);
+        var (nodes, edges, _) = await ReadGraphQueryAsync(cmd, cancellationToken);
         return Results.Ok(new GraphResponse(nodes, edges));
+    }
+);
+
+app.MapGet(
+    "/api/graph/delta",
+    async (HttpRequest request, CancellationToken cancellationToken) =>
+    {
+        var sinceLastSeenRaw = request.Query["since_last_seen"].ToString();
+        var sinceRowIdRaw = request.Query["since_row_id"].ToString();
+
+        if (!TryParseCursor(sinceLastSeenRaw, sinceRowIdRaw, out var sinceLastSeen, out var sinceRowId))
+        {
+            return Results.BadRequest(new
+            {
+                error = "Invalid cursor. Use since_last_seen (ISO datetime) and since_row_id (non-negative integer)."
+            });
+        }
+
+        var connectionString = builder.Configuration.GetConnectionString("Default");
+        await using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        await using var cmd = new SqlCommand(graphDeltaSql, conn);
+        cmd.Parameters.Add(new SqlParameter("@since_last_seen", System.Data.SqlDbType.DateTime2) { Value = sinceLastSeen });
+        cmd.Parameters.Add(new SqlParameter("@since_row_id", System.Data.SqlDbType.BigInt) { Value = sinceRowId });
+
+        var (nodes, edges, cursor) = await ReadGraphQueryAsync(cmd, cancellationToken);
+        if (edges.Count == 0)
+        {
+            cursor = new GraphCursor(sinceLastSeen, sinceRowId);
+        }
+
+        return Results.Ok(new GraphDeltaResponse(
+            UpsertNodes: nodes,
+            UpsertEdges: edges,
+            RemoveNodeIds: [],
+            RemoveEdgeIds: [],
+            Cursor: cursor
+        ));
     }
 );
 
@@ -155,6 +143,94 @@ try
     app.Run();
 }
 catch (OperationCanceledException) { }
+
+static bool TryParseCursor(string sinceLastSeenRaw, string sinceRowIdRaw, out DateTime sinceLastSeen, out long sinceRowId)
+{
+    var hasValidTimestamp = DateTime.TryParse(
+        sinceLastSeenRaw,
+        CultureInfo.InvariantCulture,
+        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+        out sinceLastSeen
+    );
+    var hasValidRowId = long.TryParse(sinceRowIdRaw, out sinceRowId) && sinceRowId >= 0;
+    return hasValidTimestamp && hasValidRowId;
+}
+
+static async Task<(List<Node> Nodes, List<Edge> Edges, GraphCursor Cursor)> ReadGraphQueryAsync(SqlCommand cmd, CancellationToken cancellationToken)
+{
+    var nodes = new List<Node>();
+    var edges = new List<Edge>();
+    var seenNodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var cursor = new GraphCursor(DateTime.MinValue, 0);
+
+    await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+    while (await reader.ReadAsync(cancellationToken))
+    {
+        if (
+            reader["source_fqdn"] is not string sourceFqdn
+            || reader["source_ip"] is not string sourceIp
+            || reader["target_fqdn"] is not string targetFqdn
+            || reader["target_ip"] is not string targetIp
+        )
+        {
+            continue;
+        }
+
+        var processName = reader["process_name"] as string;
+        var pid = reader["pid"] == DBNull.Value ? -1 : Convert.ToInt32(reader["pid"]);
+        var sourcePort = reader["source_port"] == DBNull.Value ? 0 : Convert.ToInt32(reader["source_port"]);
+        var targetPort = reader["target_port"] == DBNull.Value ? 0 : Convert.ToInt32(reader["target_port"]);
+        var seenCount = reader["seen_count"] == DBNull.Value ? 1 : Convert.ToInt64(reader["seen_count"]);
+        var sourcePid = reader["source_pid"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["source_pid"]);
+        var sourceProcessName = reader["source_process_name"] as string;
+        var targetPid = reader["target_pid"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["target_pid"]);
+        var targetProcessName = reader["target_process_name"] as string;
+        var endpointA = reader["endpoint_a"] as string;
+        var endpointB = reader["endpoint_b"] as string;
+        var servicePort = reader["service_port"] == DBNull.Value ? "0" : Convert.ToInt32(reader["service_port"]).ToString();
+        var stableEdgeId = endpointA is null || endpointB is null
+            ? $"{sourceFqdn}:{sourcePort}->{targetFqdn}:{targetPort}"
+            : $"{endpointA}|{endpointB}|{servicePort}";
+        var lastSeen = reader["last_seen"] == DBNull.Value
+            ? DateTime.MinValue
+            : Convert.ToDateTime(reader["last_seen"]);
+        var rowId = reader["id"] == DBNull.Value ? 0 : Convert.ToInt64(reader["id"]);
+
+        if (seenNodes.Add(sourceFqdn))
+        {
+            nodes.Add(new Node(sourceFqdn, sourceIp));
+        }
+
+        if (seenNodes.Add(targetFqdn))
+        {
+            nodes.Add(new Node(targetFqdn, targetIp));
+        }
+
+        edges.Add(
+            new Edge(
+                Id: stableEdgeId,
+                SourceIp: sourceIp,
+                SourcePort: sourcePort,
+                SourceFqdn: sourceFqdn,
+                TargetIp: targetIp,
+                TargetPort: targetPort,
+                TargetFqdn: targetFqdn,
+                Pid: pid,
+                ProcessName: processName,
+                SeenCount: seenCount,
+                SourcePid: sourcePid,
+                SourceProcessName: sourceProcessName,
+                TargetPid: targetPid,
+                TargetProcessName: targetProcessName,
+                LastSeen: lastSeen
+            )
+        );
+
+        cursor = new GraphCursor(lastSeen, rowId);
+    }
+
+    return (nodes, edges, cursor);
+}
 
 static string QuoteMultipartIdentifier(string configuredIdentifier)
 {

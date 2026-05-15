@@ -26,6 +26,23 @@ export type GraphData = {
   edges: GraphEdge[];
 };
 
+export type GraphCursor = {
+  last_seen: string;
+  last_row_id: number;
+};
+
+export type GraphSnapshotResponse = GraphData & {
+  cursor: GraphCursor;
+};
+
+export type GraphDeltaResponse = {
+  upsert_nodes: GraphNode[];
+  upsert_edges: GraphEdge[];
+  remove_node_ids: string[];
+  remove_edge_ids: string[];
+  cursor: GraphCursor;
+};
+
 export type EdgeDetails = {
   id: string;
   source_fqdn: string;
