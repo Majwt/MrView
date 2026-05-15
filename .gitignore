@@ -52,6 +52,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 release
+releases
 publish
 
 # PyInstaller
