@@ -7,8 +7,8 @@ type PortTarget = NodePortTarget;
 
 function getNodeSize(connectionCount: number): number {
   const baseSize = 10;
-  const growth = Math.sqrt(Math.max(connectionCount, 0)) * 2.5;
-  return Math.min(baseSize + growth, 28);
+  const growth = Math.sqrt(Math.max(connectionCount, 0)) * 1.5;
+  return Math.min(baseSize + growth, 100);
 }
 
 function getFqdnSuffix(fqdn: string): string {
