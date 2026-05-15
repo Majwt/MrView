@@ -17,8 +17,10 @@ export default function NodeConnectionDetails({ node, visibleTargets, visibleNod
         <span className="details-header-fqdn">{node.fqdn}</span>
         <div className="details-header-subtitle">
           <span className="details-header-ip">{node.ip}</span>
-          {node.subnet && (
+          {node.subnet ? (
             <span className="details-header-subnet">({node.subnet})</span>
+          ) : (
+            <span className="details-header-subnet">(no subnet info)</span>
           )}
         </div>
         <div className="details-header-metrics">
