@@ -27,7 +27,7 @@ function App() {
   const [searchSelection, setSearchSelection] = useState<string>(initialSelectedNodeId);
   const [searchSelectionVersion, setSearchSelectionVersion] = useState(initialSelectedNodeId ? 1 : 0);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
-  const searchSuggestions = useMemo(() => {
+  const fqdnSuggestions = useMemo(() => {
     if (!data) return [];
 
     const nodeNames = new Set<string>();
@@ -121,8 +121,8 @@ function App() {
           <AppHeader />
           {(selectedNode || selectedEdge) ? <NodeDetailsPanel node={selectedNode} edge={selectedEdge} filters={filters} searchQuery={searchQuery} /> : null}
           <div className="filter-container">
-            <SearchBar query={searchQuery} setQuery={setSearchQuery} suggestions={searchSuggestions} onSubmit={handleSearchSubmit} />
-            <Filters filters={filters} setFilters={setFilters} />
+            <SearchBar query={searchQuery} setQuery={setSearchQuery} suggestions={fqdnSuggestions} onSubmit={handleSearchSubmit} />
+            <Filters filters={filters} setFilters={setFilters} fqdnSuggestions={fqdnSuggestions} />
           </div>
           <span className="last-fetch-info">{`Updated at ${lastFetchedAt ? lastFetchedAt.toLocaleTimeString(["sv-se"], { hour: "2-digit", minute: "2-digit" }) : "--:--"}`}</span>
         </div>

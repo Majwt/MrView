@@ -25,7 +25,7 @@ export function buildEffectiveFilters(filters: filter[], searchQuery: string): f
 
 export function matchesEdgeFilters(edge: EdgeFilterContext, filters: filter[]): boolean {
   if (filters.length === 0) return true;
-  return filters.some((entry) => matchesEdgeFilter(edge, entry));
+  return filters.every((entry) => matchesEdgeFilter(edge, entry));
 }
 
 export function edgeMatchesFilters(graph: Graph, edge: string, filters: filter[]) {
@@ -40,7 +40,9 @@ export function edgeMatchesFilters(graph: Graph, edge: string, filters: filter[]
 
 export function matchesNodeConnectionFilters(node: NodeDetails, target: NodePortTarget, filters: filter[]): boolean {
   if (filters.length === 0) return true;
-  return filters.some((entry) => matchesNodeConnectionFilter(node, target, entry));
+
+
+  return filters.every((entry) => matchesNodeConnectionFilter(node, target, entry));
 }
 
 
