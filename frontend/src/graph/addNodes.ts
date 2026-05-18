@@ -7,7 +7,7 @@ type PortTarget = NodePortTarget;
 
 function getNodeSize(connectionCount: number): number {
   const baseSize = 10;
-  const growth = Math.sqrt(Math.max(connectionCount, 0)) * 1.5;
+  const growth = Math.sqrt(Math.max(connectionCount, 0)) * 1.1;
   return Math.min(baseSize + growth, 100);
 }
 
