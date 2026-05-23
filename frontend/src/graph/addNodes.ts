@@ -7,8 +7,8 @@ type PortTarget = NodePortTarget;
 
 function getNodeSize(connectionCount: number): number {
   const baseSize = 10;
-  const growth = Math.sqrt(Math.max(connectionCount, 0)) * 2.5;
-  return Math.min(baseSize + growth, 28);
+  const growth = Math.sqrt(Math.max(connectionCount, 0)) * 1.1;
+  return Math.min(baseSize + growth, 100);
 }
 
 function getFqdnSuffix(fqdn: string): string {
@@ -29,25 +29,31 @@ function getNodeColor(fqdn: string): string {
 }
 
 function createEdgePortIndex(edges: GraphEdge[]): Map<string, PortTarget[]> {
-  const index = new Map<string, { targets: PortTarget[]; seen: Set<string> }>();
+  const index = new Map<string, Map<string, PortTarget>>();
 
-  function addTarget(ownerFqdn: string, target: PortTarget) {
-    let entry = index.get(ownerFqdn);
-    if (!entry) {
-      entry = { targets: [], seen: new Set<string>() };
-      index.set(ownerFqdn, entry);
+  function addTarget(ownerFqdn: string, target: Omit<PortTarget, "seenCount">, seenCount: number) {
+    let groupedTargets = index.get(ownerFqdn);
+    if (!groupedTargets) {
+      groupedTargets = new Map<string, PortTarget>();
+      index.set(ownerFqdn, groupedTargets);
     }
 
     const key = `${target.port}->${target.remote_port}->${target.fqdn}->${target.ip}->${target.direction}->${target.pid}->${target.processName ?? ""}`;
-    if (entry.seen.has(key)) return;
+    const existing = groupedTargets.get(key);
+    if (existing) {
+      existing.seenCount += seenCount;
+      return;
+    }
 
-    entry.seen.add(key);
-    entry.targets.push(target);
+    groupedTargets.set(key, { ...target, seenCount });
   }
 
   for (const edge of edges) {
-    const pid = edge.pid ?? -1;
-    const processName = edge.process_name ?? null;
+    const seenCount = Math.max(edge.seen_count ?? 1, 1);
+    const sourcePid = edge.source_pid ?? edge.pid ?? -1;
+    const sourceProcessName = edge.source_process_name ?? edge.process_name ?? null;
+    const targetPid = edge.target_pid ?? edge.pid ?? -1;
+    const targetProcessName = edge.target_process_name ?? edge.process_name ?? null;
 
     addTarget(edge.source_fqdn, {
       port: edge.source_port,
@@ -55,9 +61,10 @@ function createEdgePortIndex(edges: GraphEdge[]): Map<string, PortTarget[]> {
       fqdn: edge.target_fqdn,
       ip: edge.target_ip,
       direction: "outgoing",
-      pid,
-      processName,
-    });
+      pid: sourcePid,
+      processName: sourceProcessName,
+      lastSeen: edge.last_seen ?? new Date().toISOString(),
+    }, seenCount);
 
     addTarget(edge.target_fqdn, {
       port: edge.target_port,
@@ -65,15 +72,18 @@ function createEdgePortIndex(edges: GraphEdge[]): Map<string, PortTarget[]> {
       fqdn: edge.source_fqdn,
       ip: edge.source_ip,
       direction: "incoming",
-      pid,
-      processName,
-    });
+      pid: targetPid,
+      processName: targetProcessName,
+      lastSeen: edge.last_seen ?? new Date().toISOString(),
+    }, seenCount);
   }
 
   const result = new Map<string, PortTarget[]>();
-  for (const [fqdn, { targets }] of index) {
+  for (const [fqdn, groupedTargets] of index) {
+    const targets = Array.from(groupedTargets.values());
     targets.sort((a, b) =>
-      a.port - b.port
+      b.seenCount - a.seenCount
+      || a.port - b.port
       || a.remote_port - b.remote_port
       || a.fqdn.localeCompare(b.fqdn)
       || a.direction.localeCompare(b.direction)
@@ -85,7 +95,7 @@ function createEdgePortIndex(edges: GraphEdge[]): Map<string, PortTarget[]> {
 
   return result;
 }
-
+ 
 /**
  * Adds nodes to the graph based on the provided graph data.
  *
@@ -105,12 +115,13 @@ export function addNodes(graph: Graph, data: GraphData) {
   }
 
   for (const edge of edges) {
+    const seenCount = Math.max(edge.seen_count ?? 1, 1);
     allFqdns.add(edge.source_fqdn);
     allFqdns.add(edge.target_fqdn);
     if (!fqdnToIp.has(edge.source_fqdn)) fqdnToIp.set(edge.source_fqdn, edge.source_ip);
     if (!fqdnToIp.has(edge.target_fqdn)) fqdnToIp.set(edge.target_fqdn, edge.target_ip);
-    connectionCountByFqdn.set(edge.source_fqdn, (connectionCountByFqdn.get(edge.source_fqdn) ?? 0) + 1);
-    connectionCountByFqdn.set(edge.target_fqdn, (connectionCountByFqdn.get(edge.target_fqdn) ?? 0) + 1);
+    connectionCountByFqdn.set(edge.source_fqdn, (connectionCountByFqdn.get(edge.source_fqdn) ?? 0) + seenCount);
+    connectionCountByFqdn.set(edge.target_fqdn, (connectionCountByFqdn.get(edge.target_fqdn) ?? 0) + seenCount);
   }
 
   const total = Math.max(allFqdns.size, 1);

@@ -20,12 +20,13 @@ export function addEdges(
     data.edges.forEach((edge, index) => {
       const id =
         `${edge.source_fqdn}:${edge.source_port}->${edge.target_fqdn}:${edge.target_port}#${index}`;
+      const seenCount = Math.max(edge.seen_count ?? 1, 1);
 
       graph.addEdgeWithKey(id, edge.source_fqdn, edge.target_fqdn, {
         port: edge.target_port,
         process_name: edge.process_name,
         process_id: edge.pid,
-        size: 3,
+        size: 3 + Math.log(seenCount + 1),
       });
     });
 
@@ -43,12 +44,13 @@ export function addEdges(
 
   for (const [key, edges] of groups) {
     const first = edges[0];
+    const totalSeenCount = edges.reduce((sum, edge) => sum + Math.max(edge.seen_count ?? 1, 1), 0);
 
     graph.addEdgeWithKey(key, first.source_fqdn, first.target_fqdn, {
-      size: 3 + 2*Math.log(edges.length),
-      count: edges.length,
+      size: 3 + 2 * Math.log(totalSeenCount + 1),
+      count: totalSeenCount,
       connections: edges,
-      label: `${edges.length} connections`,
+      label: `${totalSeenCount} connections`,
       type: "straight",
     });
   }

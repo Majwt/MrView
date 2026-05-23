@@ -14,6 +14,7 @@ import { nodeReducer } from "../graph/nodeReducer.ts";
 import { edgeReducer } from "../graph/edgeReducer.ts";
 import { buildEffectiveFilters } from "../filters/matchesFilter.ts";
 import forceAtlas2 from "graphology-layout-forceatlas2";
+import { syncGraph } from "../graph/syncGraph.ts";
 
 type props = {
   data: GraphData;
@@ -91,7 +92,27 @@ export default function GraphView({ data, filters, onSelectNode, onSelectEdge, s
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, textColor, backgroundColor, onSelectNode, onSelectEdge]);
+  }, [textColor, backgroundColor, onSelectNode, onSelectEdge]);
+
+  useEffect(() => {
+    if (!rendererRef.current || !graphRef.current) return;
+
+    syncGraph(graphRef.current, data);
+
+    if (selectedNodeId && !graphRef.current.hasNode(selectedNodeId)) {
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setConnectedNodeIds(new Set());
+      onSelectNode("", null);
+      onSelectEdge(null);
+    } else if (selectedEdgeId && !graphRef.current.hasEdge(selectedEdgeId)) {
+      setSelectedEdgeId(null);
+      setConnectedNodeIds(new Set());
+      onSelectEdge(null);
+    }
+
+    rendererRef.current.refresh();
+  }, [data, onSelectEdge, onSelectNode, selectedEdgeId, selectedNodeId]);
 
   useEffect(() => {
     if (!rendererRef.current || !graphRef.current) return;

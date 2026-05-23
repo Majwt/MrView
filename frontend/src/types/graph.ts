@@ -8,16 +8,39 @@ export type GraphEdge = {
   source_ip: string;
   source_port: number;
   source_fqdn: string;
+  source_pid?: number;
+  source_process_name?: string;
   target_ip: string;
   target_port: number;
   target_fqdn: string;
+  target_pid?: number;
+  target_process_name?: string;
   pid?: number;
   process_name?: string;
+  seen_count?: number;
+  last_seen?: string;
 };
 
 export type GraphData = {
   nodes: GraphNode[];
   edges: GraphEdge[];
+};
+
+export type GraphCursor = {
+  last_seen: string;
+  last_row_id: number;
+};
+
+export type GraphSnapshotResponse = GraphData & {
+  cursor: GraphCursor;
+};
+
+export type GraphDeltaResponse = {
+  upsert_nodes: GraphNode[];
+  upsert_edges: GraphEdge[];
+  remove_node_ids: string[];
+  remove_edge_ids: string[];
+  cursor: GraphCursor;
 };
 
 export type EdgeDetails = {
@@ -37,6 +60,8 @@ export type NodePortTarget = {
   direction: "incoming" | "outgoing";
   pid: number;
   processName: string | null;
+  seenCount: number;
+  lastSeen: string;
 };
 
 

@@ -24,8 +24,7 @@ export function buildEffectiveFilters(filters: filter[], searchQuery: string): f
 }
 
 export function matchesEdgeFilters(edge: EdgeFilterContext, filters: filter[]): boolean {
-  if (filters.length === 0) return true;
-  return filters.some((entry) => matchesEdgeFilter(edge, entry));
+  return evaluateFilters(filters, (entry) => matchesEdgeCriterion(edge, entry));
 }
 
 export function edgeMatchesFilters(graph: Graph, edge: string, filters: filter[]) {
@@ -39,12 +38,40 @@ export function edgeMatchesFilters(graph: Graph, edge: string, filters: filter[]
 }
 
 export function matchesNodeConnectionFilters(node: NodeDetails, target: NodePortTarget, filters: filter[]): boolean {
-  if (filters.length === 0) return true;
-  return filters.some((entry) => matchesNodeConnectionFilter(node, target, entry));
+  return evaluateFilters(filters, (entry) => matchesNodeConnectionCriterion(node, target, entry));
 }
 
 
-function matchesEdgeFilter(edge: EdgeFilterContext, entry: filter): boolean {
+function evaluateFilters(filters: filter[], matchesEntry: (entry: filter) => boolean): boolean {
+  if (filters.length === 0) return true;
+
+  const normalized = filters.filter((entry) => entry.value.trim());
+  if (normalized.length === 0) return true;
+
+  const searchEntries = normalized.filter((entry) => entry.id === "__search__");
+  if (!searchEntries.every(matchesEntry)) return false;
+
+  const excludeEntries = normalized.filter((entry) => entry.operation === "exclude");
+  if (excludeEntries.some(matchesEntry)) return false;
+
+  const includeEntries = normalized.filter((entry) => entry.operation === "include" && entry.id !== "__search__");
+  if (includeEntries.length === 0) return true;
+
+  const includesByType = new Map<filter["type"], filter[]>();
+  for (const entry of includeEntries) {
+    const entries = includesByType.get(entry.type);
+    if (entries) entries.push(entry);
+    else includesByType.set(entry.type, [entry]);
+  }
+
+  for (const entries of includesByType.values()) {
+    if (!entries.some(matchesEntry)) return false;
+  }
+
+  return true;
+}
+
+function matchesEdgeCriterion(edge: EdgeFilterContext, entry: filter): boolean {
   const value = entry.value.trim();
   if (!value) return true;
 
@@ -56,26 +83,28 @@ function matchesEdgeFilter(edge: EdgeFilterContext, entry: filter): boolean {
       (connection) => port === connection.source_port || port === connection.target_port,
     );
 
-    return applyOperation(matchesPort, entry.operation);
+    return matchesPort;
   }
 
   if (entry.type === "ip") {
     const lowerValue = value.toLowerCase();
     const ipMatches = edge.sourceNode.ip.toLowerCase() === lowerValue || edge.targetNode.ip.toLowerCase() === lowerValue;
-    return applyOperation(ipMatches, entry.operation);
+    return ipMatches;
   }
 
   if (entry.type === "fqdn") {
     const fqdnMatches = matchesFqdn(edge.sourceNode.fqdn, value); //|| matchesFqdn(edge.targetNode.fqdn, value);
-    return applyOperation(fqdnMatches, entry.operation);
+    return fqdnMatches;
   }
 
   if (entry.type === "process") {
     const lowerValue = value.toLowerCase();
     const processMatches = edge.connections.some((connection) =>
-      (connection.process_name ?? "").toLowerCase().includes(lowerValue),
+      (connection.process_name ?? "").toLowerCase().includes(lowerValue)
+      || (connection.source_process_name ?? "").toLowerCase().includes(lowerValue)
+      || (connection.target_process_name ?? "").toLowerCase().includes(lowerValue),
     );
-    return applyOperation(processMatches, entry.operation);
+    return processMatches;
   }
 
   if (entry.type === "service") {
@@ -86,13 +115,13 @@ function matchesEdgeFilter(edge: EdgeFilterContext, entry: filter): boolean {
       const serviceMatches = sourceService === lowerValue || targetService === lowerValue;
       return serviceMatches;
     });
-    return applyOperation(serviceMatches, entry.operation);
+    return serviceMatches;
   }
 
   return true;
 }
 
-function matchesNodeConnectionFilter(node: NodeDetails, target: NodePortTarget, entry: filter): boolean {
+function matchesNodeConnectionCriterion(node: NodeDetails, target: NodePortTarget, entry: filter): boolean {
   const value = entry.value.trim();
   if (!value) return true;
 
@@ -100,23 +129,23 @@ function matchesNodeConnectionFilter(node: NodeDetails, target: NodePortTarget, 
     const port = Number(value);
     if (Number.isNaN(port)) return true;
     const matchesPort = port === target.port || port === target.remote_port;
-    return applyOperation(matchesPort, entry.operation);
+    return matchesPort;
   }
 
   if (entry.type === "ip") {
     const lowerValue = value.toLowerCase();
     const ipMatches = node.ip.toLowerCase() === lowerValue || target.ip.toLowerCase() === lowerValue;
-    return applyOperation(ipMatches, entry.operation);
+    return ipMatches;
   }
 
   if (entry.type === "fqdn") {
     const fqdnMatches = matchesFqdn(node.fqdn, value)// || matchesFqdn(target.fqdn, value);
-    return applyOperation(fqdnMatches, entry.operation);
+    return fqdnMatches;
   }
 
   if (entry.type === "process") {
     const processMatches = (target.processName ?? "").toLowerCase().includes(value.toLowerCase());
-    return applyOperation(processMatches, entry.operation);
+    return processMatches;
   }
 
   if (entry.type === "service") {
@@ -124,14 +153,10 @@ function matchesNodeConnectionFilter(node: NodeDetails, target: NodePortTarget, 
     const localService = getServiceName(target.port).toLowerCase();
     const remoteService = getServiceName(target.remote_port).toLowerCase();
     const serviceMatches = localService === lowerValue || remoteService === lowerValue;
-    return applyOperation(serviceMatches, entry.operation);
+    return serviceMatches;
   }
 
   return true;
-}
-
-function applyOperation(matches: boolean, operation: filter["operation"]): boolean {
-  return operation === "include" ? matches : !matches;
 }
 
 function normalizeFqdn(s: string): string {

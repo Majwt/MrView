@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import GraphView from './components/GraphView'
 import brand from "./config/brand";
-import type { EdgeDetails, GraphData, NodeDetails } from './types/graph';
-import { fetchGraph } from './api/graphApi';
+import type { EdgeDetails, GraphCursor, GraphData, NodeDetails } from './types/graph';
+import { applyGraphDelta, fetchGraphDelta, fetchGraphSnapshot } from './api/graphApi';
 import NodeDetailsPanel from './components/NodeDetailsPane';
 import AppHeader from './components/AppHeader';
 import Filters from './components/Filters';
@@ -27,7 +27,8 @@ function App() {
   const [searchSelection, setSearchSelection] = useState<string>(initialSelectedNodeId);
   const [searchSelectionVersion, setSearchSelectionVersion] = useState(initialSelectedNodeId ? 1 : 0);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
-  const searchSuggestions = useMemo(() => {
+  const [graphCursor, setGraphCursor] = useState<GraphCursor | null>(null);
+  const fqdnSuggestions = useMemo(() => {
     if (!data) return [];
 
     const nodeNames = new Set<string>();
@@ -67,27 +68,72 @@ function App() {
 
   // load graph on initial render
   useEffect(() => {
+    let cancelled = false;
+
     async function loadGraph() {
-      const graph = await fetchGraph();
-      setData(graph);
+      const snapshot = await fetchGraphSnapshot();
+      if (cancelled) return;
+      setData({ nodes: snapshot.nodes, edges: snapshot.edges });
+      setGraphCursor(snapshot.cursor);
       setLastFetchedAt(new Date());
     }
+
     loadGraph();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
   // auto fetch graph every n minutes
   useEffect(() => {
+    if (!graphCursor) return;
+    const currentCursor = graphCursor;
+
+    let active = true;
+    let inFlight = false;
+
     async function refreshGraph() {
-      const graph = await fetchGraph();
-      setData(graph);
-      setLastFetchedAt(new Date());
+      if (inFlight) return;
+      inFlight = true;
+
+      try {
+        const delta = await fetchGraphDelta(currentCursor);
+        if (!active) return;
+
+        setData((currentData) => {
+          if (!currentData) {
+            return {
+              nodes: delta.upsert_nodes,
+              edges: delta.upsert_edges,
+            };
+          }
+
+          return applyGraphDelta(currentData, delta);
+        });
+        setGraphCursor(delta.cursor);
+        setLastFetchedAt(new Date());
+      } catch {
+        if (!active) return;
+        const snapshot = await fetchGraphSnapshot();
+        if (!active) return;
+        setData({ nodes: snapshot.nodes, edges: snapshot.edges });
+        setGraphCursor(snapshot.cursor);
+        setLastFetchedAt(new Date());
+      } finally {
+        inFlight = false;
+      }
     }
 
     const intervalId = window.setInterval(() => {
       refreshGraph();
     }, refreshIntervalMinutes * 60 * 1000);
 
-    return () => window.clearInterval(intervalId);
-  }, []);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [graphCursor]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -121,8 +167,8 @@ function App() {
           <AppHeader />
           {(selectedNode || selectedEdge) ? <NodeDetailsPanel node={selectedNode} edge={selectedEdge} filters={filters} searchQuery={searchQuery} /> : null}
           <div className="filter-container">
-            <SearchBar query={searchQuery} setQuery={setSearchQuery} suggestions={searchSuggestions} onSubmit={handleSearchSubmit} />
-            <Filters filters={filters} setFilters={setFilters} />
+            <SearchBar query={searchQuery} setQuery={setSearchQuery} suggestions={fqdnSuggestions} onSubmit={handleSearchSubmit} />
+            <Filters filters={filters} setFilters={setFilters} fqdnSuggestions={fqdnSuggestions} />
           </div>
           <span className="last-fetch-info">{`Updated at ${lastFetchedAt ? lastFetchedAt.toLocaleTimeString(["sv-se"], { hour: "2-digit", minute: "2-digit" }) : "--:--"}`}</span>
         </div>

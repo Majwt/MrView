@@ -6,9 +6,10 @@ import FilterItem from "./FilterItem";
 type Props = {
   filters: filter[];
   setFilters: Dispatch<SetStateAction<filter[]>>;
+  fqdnSuggestions: string[];
 };
 
-function Filters({ filters, setFilters }: Props) {
+function Filters({ filters, setFilters, fqdnSuggestions }: Props) {
   const addFilter = () => {
     setFilters([
       ...filters,
@@ -30,6 +31,7 @@ function Filters({ filters, setFilters }: Props) {
         <FilterItem
           key={entry.id}
           filter={entry}
+          fqdnSuggestions={fqdnSuggestions}
           onChange={(nextOperation: FilterOperation, nextType: FilterType, nextValue: string) => updateFilter(entry.id, {
             operation: nextOperation,
             type: nextType,

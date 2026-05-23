@@ -6,11 +6,13 @@ type props = {
   filter: filter;
   onChange: (operation: FilterOperation, type: FilterType, value: string) => void;
   onRemove: () => void;
+  fqdnSuggestions: string[];
 }
 
-function FilterItem({ filter, onChange, onRemove }: props) {
+function FilterItem({ filter, onChange, onRemove, fqdnSuggestions }: props) {
   const valueInputType = filter.type === "port" ? "number" : "text";
   const valuePlaceholder = filter.type === "port" ? "1433" : "value";
+  const fqdnSuggestionsId = "fqdn-filter-suggestions";
 
   return (
     <div className="filter-item">
@@ -58,10 +60,16 @@ function FilterItem({ filter, onChange, onRemove }: props) {
           className="filter-input"
           type={valueInputType}
           value={filter.value}
+          list={filter.type === "fqdn" ? fqdnSuggestionsId : undefined}
           placeholder={valuePlaceholder}
           onChange={(event) => onChange(filter.operation, filter.type, event.target.value)}
         />
       )}
+      <datalist id={fqdnSuggestionsId}>
+        {fqdnSuggestions.map((suggestion) => (
+          <option key={suggestion} value={suggestion} />
+        ))}
+      </datalist>
       <button type="button" className="filter-remove" onClick={onRemove} aria-label="Remove filter">
         ×
       </button>
