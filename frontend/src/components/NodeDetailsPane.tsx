@@ -1,5 +1,5 @@
 import "./NodeDetailsPane.css";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { buildEffectiveFilters, matchesEdgeFilters, matchesNodeConnectionFilters } from "../filters/matchesFilter";
 import type { filter } from "../types/filter";
 import type { EdgeDetails, NodeDetails } from "../types/graph";
@@ -13,10 +13,7 @@ type Props = {
   searchQuery: string;
 };
 
-type PaneMode = "auto" | "minimized";
-
 export default function NodeDetailsPanel({ node, edge, filters, searchQuery }: Props) {
-  const [paneMode, setPaneMode] = useState<PaneMode>("auto");
   const effectiveFilters = useMemo(() => buildEffectiveFilters(filters, searchQuery), [filters, searchQuery]);
   const visibleTargets = useMemo(() => {
     if (!node) return [];
@@ -81,38 +78,24 @@ export default function NodeDetailsPanel({ node, edge, filters, searchQuery }: P
   );
 
   return (
-    <aside className={`details-panel ${paneMode}`}>
-      {paneMode === "minimized" ? (
-        <button
-          type="button"
-          className="details-minimized-strip"
-          onClick={() => setPaneMode("auto")}
-          title="Restore auto size"
-          aria-label="Restore details pane auto size"
-        >
-          <span aria-hidden="true">▲</span>
-        </button>
-      ) : (
-        <div className="details-content">
-          {node ? (
-            <NodeConnectionDetails
-              node={node}
-              visibleTargets={visibleTargets}
-              visibleNodeConnectionCount={visibleNodeConnectionCount}
-              onMinimize={() => setPaneMode("minimized")}
-            />
-          ) : edge ? (
-            <EdgeConnectionDetails
-              edge={edge}
-              aggregatedVisibleEdgeConnections={aggregatedVisibleEdgeConnections}
-              visibleEdgeConnectionCount={visibleEdgeConnectionCount}
-              onMinimize={() => setPaneMode("minimized")}
-            />
-          ) : (
-            <p id="no-node-selected">Select a node or edge to see details.</p>
-          )}
-        </div>
-      )}
+    <aside className="details-panel">
+      <div className="details-content">
+        {node ? (
+          <NodeConnectionDetails
+            node={node}
+            visibleTargets={visibleTargets}
+            visibleNodeConnectionCount={visibleNodeConnectionCount}
+          />
+        ) : edge ? (
+          <EdgeConnectionDetails
+            edge={edge}
+            aggregatedVisibleEdgeConnections={aggregatedVisibleEdgeConnections}
+            visibleEdgeConnectionCount={visibleEdgeConnectionCount}
+          />
+        ) : (
+          <p id="no-node-selected">Select a node or edge to see details.</p>
+        )}
+      </div>
     </aside>
   );
 }

@@ -11,12 +11,11 @@ type Props = {
   edge: EdgeDetails;
   aggregatedVisibleEdgeConnections: AggregatedEdgeConnection[];
   visibleEdgeConnectionCount: number;
-  onMinimize: () => void;
 };
 
 
 
-export default function EdgeConnectionDetails({ edge, aggregatedVisibleEdgeConnections, visibleEdgeConnectionCount, onMinimize }: Props) {
+export default function EdgeConnectionDetails({ edge, aggregatedVisibleEdgeConnections, visibleEdgeConnectionCount }: Props) {
   return (
     <div className="details-node-info">
       <header className="details-header">
@@ -28,15 +27,6 @@ export default function EdgeConnectionDetails({ edge, aggregatedVisibleEdgeConne
           <span className="details-count-pill">{aggregatedVisibleEdgeConnections.length} aggregated rows</span>
           <span className="details-count-pill emphasis">{visibleEdgeConnectionCount} connections</span>
         </div>
-        <button
-          type="button"
-          className="details-minimize-button"
-          onClick={onMinimize}
-          title="Minimize details pane"
-          aria-label="Minimize details pane"
-        >
-          <span aria-hidden="true">▾</span>
-        </button>
       </header>
       <DetailsNote/>
       {aggregatedVisibleEdgeConnections.length > 0 ? (

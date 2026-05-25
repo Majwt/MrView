@@ -6,11 +6,10 @@ type Props = {
   node: NodeDetails;
   visibleTargets: NodePortTarget[];
   visibleNodeConnectionCount: number;
-  onMinimize: () => void;
 };
 
 
-export default function NodeConnectionDetails({ node, visibleTargets, visibleNodeConnectionCount, onMinimize }: Props) {
+export default function NodeConnectionDetails({ node, visibleTargets, visibleNodeConnectionCount }: Props) {
   return (
     <div className="details-node-info">
       <header className="details-header">
@@ -27,15 +26,6 @@ export default function NodeConnectionDetails({ node, visibleTargets, visibleNod
           <span className="details-count-pill">{visibleTargets.length} aggregated rows</span>
           <span className="details-count-pill emphasis">{visibleNodeConnectionCount} connections</span>
         </div>
-        <button
-          type="button"
-          className="details-minimize-button"
-          onClick={onMinimize}
-          title="Minimize details pane"
-          aria-label="Minimize details pane"
-        >
-          <span aria-hidden="true">▾</span>
-        </button>
       </header>
       <DetailsNote/>
       {visibleTargets.length > 0 ? (
