@@ -170,7 +170,7 @@ function App() {
             <SearchBar query={searchQuery} setQuery={setSearchQuery} suggestions={fqdnSuggestions} onSubmit={handleSearchSubmit} />
             <Filters filters={filters} setFilters={setFilters} fqdnSuggestions={fqdnSuggestions} />
           </div>
-          <span className="last-fetch-info">{`Updated at ${lastFetchedAt ? lastFetchedAt.toLocaleTimeString(["sv-se"], { hour: "2-digit", minute: "2-digit" }) : "--:--"}`}</span>
+          <span className="last-fetch-info">{`Updated at ${lastFetchedAt ? lastFetchedAt.toLocaleTimeString(["sv-se"], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--"}`}</span>
         </div>
       </section>
     </main>

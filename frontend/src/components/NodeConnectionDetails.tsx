@@ -10,12 +10,14 @@ type Props = {
 
 
 export default function NodeConnectionDetails({ node, visibleTargets, visibleNodeConnectionCount }: Props) {
-  const hasCustomerInfo = node.customer && (node.customer.name || node.customer.id || node.customer.cmdb_ci_id);
-  const customerName = node.customer?.name
-  const hasCustomerId = node.customer?.id
-  const customerIdLabel = `ID ${node.customer?.id}`;
-  const customerCmdbLabel = `CMDB ${node.customer?.cmdb_ci_id}`;
-  const customerSummary = `${customerName} • ${customerIdLabel} • ${customerCmdbLabel}`;
+  const customerSummaryParts: string[] = [];
+  if (node.customer?.name) customerSummaryParts.push(node.customer.name);
+  if (node.customer?.id !== undefined && node.customer?.id !== null && node.customer?.id !== "" && node.customer?.id !== -1) {
+    customerSummaryParts.push(`ID ${node.customer.id}`);
+  }
+  if (node.customer?.cmdb_ci_id) customerSummaryParts.push(`CMDB ${node.customer.cmdb_ci_id}`);
+  const customerSummary = customerSummaryParts.join(" • ");
+  const hasCustomerInfo = customerSummaryParts.length > 0;
 
   return (
     <div className="details-node-info">
