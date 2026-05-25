@@ -2,8 +2,15 @@ import type { GraphData } from "../types/graph";
 
 import type Graph from "graphology";
 
+function getEdgeSize(seenCount: number): number {
+
+  const baseSize = 4;
+  const growth = Math.log2(Math.max(seenCount, 1)) * 0.2
+  return baseSize + growth;
+}
+
+
 /**
- *
  * Adds edges to the graph based on the provided GraphData.
  * If groupSameDirectionEdges is true, edges with the same source and target will be grouped together, and their attributes will be aggregated.
  *
@@ -16,6 +23,8 @@ export function addEdges(
   data: GraphData,
   groupSameDirectionEdges: boolean,
 ) {
+
+
   if (!groupSameDirectionEdges) {
     data.edges.forEach((edge, index) => {
       const id =
@@ -26,7 +35,7 @@ export function addEdges(
         port: edge.target_port,
         process_name: edge.process_name,
         process_id: edge.pid,
-        size: 3 + Math.log(seenCount + 1),
+        size: getEdgeSize(seenCount),
       });
     });
 
@@ -47,11 +56,11 @@ export function addEdges(
     const totalSeenCount = edges.reduce((sum, edge) => sum + Math.max(edge.seen_count ?? 1, 1), 0);
 
     graph.addEdgeWithKey(key, first.source_fqdn, first.target_fqdn, {
-      size: 3 + 2 * Math.log(totalSeenCount + 1),
       count: totalSeenCount,
       connections: edges,
       label: `${totalSeenCount} connections`,
       type: "straight",
+      size: getEdgeSize(totalSeenCount),
     });
   }
 }

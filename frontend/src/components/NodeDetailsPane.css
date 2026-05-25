@@ -11,6 +11,7 @@
   border-radius: 1rem;
   border: 1px solid var(--border);
   overflow: hidden;
+  padding: 1rem;
 }
 
 
@@ -23,7 +24,6 @@
   position: relative;
   height: 97%;
   min-height: 0;
-  padding: 1rem;
   overflow-x: auto;
   overflow-y: auto;
 }

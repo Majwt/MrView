@@ -35,7 +35,7 @@ const FILTER_CODE_TO_OPERATION: Record<string, filter["operation"] | undefined> 
   e: "exclude",
 };
 
-export const refreshIntervalMinutes: number = import.meta.env.VITE_REFRESH_INTERVAL_MINUTES || 10;
+export const refreshIntervalMinutes: number = import.meta.env.VITE_REFRESH_INTERVAL_MINUTES || 1;
 
 export function readInitialSearchQuery(): string {
   const params = new URLSearchParams(window.location.search);
