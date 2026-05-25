@@ -101,10 +101,12 @@ export function addNodes(graph: Graph, data: GraphData) {
   const portTargetsIndex = createEdgePortIndex(edges);
   const ipByFqdn = new Map<string, string>();
   const subnetByFqdn = new Map<string, string>();
+  const customerByFqdn = new Map<string, NodeDetails["customer"]>();
 
   for (const node of nodes) {
     if (node.ip) ipByFqdn.set(node.fqdn, node.ip);
     if (node.subnet) subnetByFqdn.set(node.fqdn, node.subnet);
+    if (node.customer) customerByFqdn.set(node.fqdn, node.customer);
   }
 
   for (const edge of edges) {
@@ -145,6 +147,7 @@ export function addNodes(graph: Graph, data: GraphData) {
       fqdn,
       color: getNodeColor(fqdn),
       subnet: subnetByFqdn.get(fqdn) ?? "",
+      customer: customerByFqdn.get(fqdn),
       portTargets: portTargetsIndex.get(fqdn) ?? [],
       size: baseNodeSize,
       x: Math.cos(angle) * radius,

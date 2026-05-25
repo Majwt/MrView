@@ -19,13 +19,15 @@ export default function EdgeConnectionDetails({ edge, aggregatedVisibleEdgeConne
   return (
     <div className="details-node-info">
       <header className="details-header">
-        <span className="details-header-fqdn">{edge.source_fqdn} → {edge.target_fqdn}</span>
-        <div className="details-header-subtitle">
-          <span className="details-header-ip">{edge.source_ip} → {edge.target_ip}</span>
+        <div className="details-header-top">
+          <span className="details-header-fqdn">{edge.source_fqdn} → {edge.target_fqdn}</span>
+          <div className="details-header-metrics">
+            <span className="details-count-pill">{aggregatedVisibleEdgeConnections.length} aggregated rows</span>
+            <span className="details-count-pill emphasis">{visibleEdgeConnectionCount} connections</span>
+          </div>
         </div>
-        <div className="details-header-metrics">
-          <span className="details-count-pill">{aggregatedVisibleEdgeConnections.length} aggregated rows</span>
-          <span className="details-count-pill emphasis">{visibleEdgeConnectionCount} connections</span>
+        <div className="details-header-bottom">
+          <span className="details-header-ip">{edge.source_ip} → {edge.target_ip}</span>
         </div>
       </header>
       <DetailsNote/>

@@ -10,24 +10,42 @@ type Props = {
 
 
 export default function NodeConnectionDetails({ node, visibleTargets, visibleNodeConnectionCount }: Props) {
+  const hasCustomerInfo = node.customer && (node.customer.name || node.customer.id || node.customer.cmdb_ci_id);
+  const customerName = node.customer?.name
+  const hasCustomerId = node.customer?.id
+  const customerIdLabel = `ID ${node.customer?.id}`;
+  const customerCmdbLabel = `CMDB ${node.customer?.cmdb_ci_id}`;
+  const customerSummary = `${customerName} • ${customerIdLabel} • ${customerCmdbLabel}`;
+
   return (
     <div className="details-node-info">
       <header className="details-header">
-        <span className="details-header-fqdn">{node.fqdn}</span>
-        <div className="details-header-subtitle">
+        <div className="details-header-top">
+          <span className="details-header-fqdn">{node.fqdn}</span>
+          <div className="details-header-metrics">
+            <span className="details-count-pill">{visibleTargets.length} aggregated rows</span>
+            <span className="details-count-pill emphasis">{visibleNodeConnectionCount} connections</span>
+          </div>
+        </div>
+        <div className="details-header-bottom">
           <span className="details-header-ip">{node.ip}</span>
           {node.subnet ? (
             <span className="details-header-subnet">({node.subnet})</span>
           ) : (
             <span className="details-header-subnet">(no subnet info)</span>
           )}
-        </div>
-        <div className="details-header-metrics">
-          <span className="details-count-pill">{visibleTargets.length} aggregated rows</span>
-          <span className="details-count-pill emphasis">{visibleNodeConnectionCount} connections</span>
+          {hasCustomerInfo && (
+            <>
+              <span className="details-header-divider" aria-hidden="true">•</span>
+              <span className="details-header-customer-inline">
+                <span className="details-header-customer-label">Customer</span>
+                <span className="details-header-customer-value">{customerSummary}</span>
+              </span>
+            </>
+          )}
         </div>
       </header>
-      <DetailsNote/>
+      <DetailsNote />
       {visibleTargets.length > 0 ? (
         <table className="details-table">
           <thead>
