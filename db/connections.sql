@@ -3,10 +3,6 @@
 CREATE TABLE [test].[connections] (
     [Id] [bigint] IDENTITY(1,1) NOT NULL,
 
-    [CmdbCiId] [nvarchar](128) NULL,
-    [Customer] [nvarchar](100) NULL,
-    [CustomerID] [int] NULL,
-
     [HostName] [nvarchar](255) NOT NULL,
     [Fqdn] [nvarchar](255) NOT NULL,
 
@@ -18,12 +14,10 @@ CREATE TABLE [test].[connections] (
 
     [LocalFqdn] [nvarchar](255) NULL,
     [LocalAddressIPv4] [varchar](45) NOT NULL,
-    [LocalSubnet] [varchar](45) NULL,
     [LocalPort] [int] NOT NULL,
 
     [RemoteFqdn] [nvarchar](255) NULL,
     [RemoteAddressIPv4] [varchar](45) NOT NULL,
-    [TargetSubnet] [varchar](45) NULL,
     [RemotePort] [int] NOT NULL,
 
     [State] [nvarchar](50) NULL,
