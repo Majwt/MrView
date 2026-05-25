@@ -9,6 +9,12 @@ function getEdgeSize(seenCount: number): number {
   return baseSize + growth;
 }
 
+function getNodeSize(connectionCount: number): number {
+  const baseSize = 10;
+  const growth = Math.log2(Math.max(connectionCount, 1)) * 0.5;
+  return baseSize + growth;
+}
+
 
 /**
  * Adds edges to the graph based on the provided GraphData.
@@ -23,6 +29,13 @@ export function addEdges(
   data: GraphData,
   groupSameDirectionEdges: boolean,
 ) {
+  const connectionCountByFqdn = new Map<string, number>();
+  for (const edge of data.edges) {
+    const seenCount = Math.max(edge.seen_count ?? 1, 1);
+    connectionCountByFqdn.set(edge.source_fqdn, (connectionCountByFqdn.get(edge.source_fqdn) ?? 0) + seenCount);
+    connectionCountByFqdn.set(edge.target_fqdn, (connectionCountByFqdn.get(edge.target_fqdn) ?? 0) + seenCount);
+  }
+
 
 
   if (!groupSameDirectionEdges) {
@@ -39,6 +52,10 @@ export function addEdges(
       });
     });
 
+    for (const [fqdn, count] of connectionCountByFqdn) {
+      if (!graph.hasNode(fqdn)) continue;
+      graph.setNodeAttribute(fqdn, "size", getNodeSize(count));
+    }
     return;
   }
 
@@ -62,5 +79,10 @@ export function addEdges(
       type: "straight",
       size: getEdgeSize(totalSeenCount),
     });
+  }
+
+  for (const [fqdn, count] of connectionCountByFqdn) {
+    if (!graph.hasNode(fqdn)) continue;
+    graph.setNodeAttribute(fqdn, "size", getNodeSize(count));
   }
 }

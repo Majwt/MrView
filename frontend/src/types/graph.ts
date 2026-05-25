@@ -1,6 +1,11 @@
 export type GraphNode = {
   fqdn: string;
   ip: string;
+  customer_id?: string;
+  customer?: string;
+  cmdbciid?: string;
+  subnet?: string;
+  mac_address?: string;
 };
 
 export type GraphEdge = {

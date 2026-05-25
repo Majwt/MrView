@@ -5,12 +5,6 @@ import type { GraphEdge } from "../types/graph";
 
 type PortTarget = NodePortTarget;
 
-function getNodeSize(connectionCount: number): number {
-  const baseSize = 10;
-  const growth = Math.log2(Math.max(connectionCount,1)) * 0.5
-  return baseSize + growth;
-}
-
 function getFqdnSuffix(fqdn: string): string {
   const parts = fqdn.split(".").filter(Boolean);
   return parts.length ? parts[parts.length - 1].toLowerCase() : fqdn.toLowerCase();
@@ -105,41 +99,54 @@ function createEdgePortIndex(edges: GraphEdge[]): Map<string, PortTarget[]> {
 export function addNodes(graph: Graph, data: GraphData) {
   const { nodes, edges } = data;
   const portTargetsIndex = createEdgePortIndex(edges);
-  const fqdnToIp = new Map<string, string>();
-  const allFqdns = new Set<string>();
-  const connectionCountByFqdn = new Map<string, number>();
+  const ipByFqdn = new Map<string, string>();
+  const subnetByFqdn = new Map<string, string>();
 
   for (const node of nodes) {
-    allFqdns.add(node.fqdn);
-    if (node.ip) fqdnToIp.set(node.fqdn, node.ip);
+    if (node.ip) ipByFqdn.set(node.fqdn, node.ip);
+    if (node.subnet) subnetByFqdn.set(node.fqdn, node.subnet);
   }
 
   for (const edge of edges) {
-    const seenCount = Math.max(edge.seen_count ?? 1, 1);
-    allFqdns.add(edge.source_fqdn);
-    allFqdns.add(edge.target_fqdn);
-    if (!fqdnToIp.has(edge.source_fqdn)) fqdnToIp.set(edge.source_fqdn, edge.source_ip);
-    if (!fqdnToIp.has(edge.target_fqdn)) fqdnToIp.set(edge.target_fqdn, edge.target_ip);
-    connectionCountByFqdn.set(edge.source_fqdn, (connectionCountByFqdn.get(edge.source_fqdn) ?? 0) + seenCount);
-    connectionCountByFqdn.set(edge.target_fqdn, (connectionCountByFqdn.get(edge.target_fqdn) ?? 0) + seenCount);
+    if (!ipByFqdn.has(edge.source_fqdn)) ipByFqdn.set(edge.source_fqdn, edge.source_ip);
+    if (!ipByFqdn.has(edge.target_fqdn)) ipByFqdn.set(edge.target_fqdn, edge.target_ip);
   }
 
-  const total = Math.max(allFqdns.size, 1);
+  const orderedFqdns: string[] = [];
+  const seenFqdns = new Set<string>();
+  for (const node of nodes) {
+    if (seenFqdns.has(node.fqdn)) continue;
+    seenFqdns.add(node.fqdn);
+    orderedFqdns.push(node.fqdn);
+  }
+  for (const edge of edges) {
+    if (!seenFqdns.has(edge.source_fqdn)) {
+      seenFqdns.add(edge.source_fqdn);
+      orderedFqdns.push(edge.source_fqdn);
+    }
+    if (!seenFqdns.has(edge.target_fqdn)) {
+      seenFqdns.add(edge.target_fqdn);
+      orderedFqdns.push(edge.target_fqdn);
+    }
+  }
+
+  const total = Math.max(orderedFqdns.length, 1);
   const radius = 10;
+  const baseNodeSize = 10;
   let index = 0;
 
-  for (const fqdn of allFqdns) {
+  for (const fqdn of orderedFqdns) {
     if (graph.hasNode(fqdn)) continue;
 
     const angle = (2 * Math.PI * index) / total;
     const nodeDetails: NodeDetails = {
       label: fqdn,
-      ip: fqdnToIp.get(fqdn) ?? "",
+      ip: ipByFqdn.get(fqdn) ?? "",
       fqdn,
       color: getNodeColor(fqdn),
-      subnet: "",
+      subnet: subnetByFqdn.get(fqdn) ?? "",
       portTargets: portTargetsIndex.get(fqdn) ?? [],
-      size: getNodeSize(connectionCountByFqdn.get(fqdn) ?? 0),
+      size: baseNodeSize,
       x: Math.cos(angle) * radius,
       y: Math.sin(angle) * radius,
     };
