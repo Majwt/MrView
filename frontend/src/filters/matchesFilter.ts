@@ -45,24 +45,25 @@ export function matchesNodeConnectionFilters(node: NodeDetails, target: NodePort
 function evaluateFilters(filters: filter[], matchesEntry: (entry: filter) => boolean): boolean {
   if (filters.length === 0) return true;
 
-  const normalized = filters.filter((entry) => entry.value.trim());
-  if (normalized.length === 0) return true;
-
-  const searchEntries = normalized.filter((entry) => entry.id === "__search__");
-  if (!searchEntries.every(matchesEntry)) return false;
-
-  const excludeEntries = normalized.filter((entry) => entry.operation === "exclude");
-  if (excludeEntries.some(matchesEntry)) return false;
-
-  const includeEntries = normalized.filter((entry) => entry.operation === "include" && entry.id !== "__search__");
-  if (includeEntries.length === 0) return true;
-
   const includesByType = new Map<filter["type"], filter[]>();
-  for (const entry of includeEntries) {
-    const entries = includesByType.get(entry.type);
-    if (entries) entries.push(entry);
-    else includesByType.set(entry.type, [entry]);
+  let hasInclude = false;
+
+  for (const entry of filters) {
+    if (!entry.value.trim()) continue;
+
+    const entryMatches = matchesEntry(entry);
+    if (entry.id === "__search__" && !entryMatches) return false;
+    if (entry.operation === "exclude" && entryMatches) return false;
+
+    if (entry.operation === "include" && entry.id !== "__search__") {
+      hasInclude = true;
+      const entries = includesByType.get(entry.type);
+      if (entries) entries.push(entry);
+      else includesByType.set(entry.type, [entry]);
+    }
   }
+
+  if (!hasInclude) return true;
 
   for (const entries of includesByType.values()) {
     if (!entries.some(matchesEntry)) return false;
@@ -71,92 +72,77 @@ function evaluateFilters(filters: filter[], matchesEntry: (entry: filter) => boo
   return true;
 }
 
-function matchesEdgeCriterion(edge: EdgeFilterContext, entry: filter): boolean {
+type CriterionContext = {
+  fqdn: string;
+  ips: string[];
+  ports: number[];
+  servicePorts: number[];
+  processNames: string[];
+};
+
+function matchesCriterion(context: CriterionContext, entry: filter): boolean {
   const value = entry.value.trim();
   if (!value) return true;
 
   if (entry.type === "port") {
     const port = Number(value);
     if (Number.isNaN(port)) return true;
-
-    const matchesPort = edge.connections.some(
-      (connection) => port === connection.source_port || port === connection.target_port,
-    );
-
-    return matchesPort;
+    return context.ports.some((candidate) => candidate === port);
   }
 
   if (entry.type === "ip") {
     const lowerValue = value.toLowerCase();
-    const ipMatches = edge.sourceNode.ip.toLowerCase() === lowerValue || edge.targetNode.ip.toLowerCase() === lowerValue;
-    return ipMatches;
+    return context.ips.some((ip) => ip.toLowerCase() === lowerValue);
   }
 
   if (entry.type === "fqdn") {
-    const fqdnMatches = matchesFqdn(edge.sourceNode.fqdn, value); //|| matchesFqdn(edge.targetNode.fqdn, value);
-    return fqdnMatches;
+    return matchesFqdn(context.fqdn, value);
   }
 
   if (entry.type === "process") {
     const lowerValue = value.toLowerCase();
-    const processMatches = edge.connections.some((connection) =>
-      (connection.process_name ?? "").toLowerCase().includes(lowerValue)
-      || (connection.source_process_name ?? "").toLowerCase().includes(lowerValue)
-      || (connection.target_process_name ?? "").toLowerCase().includes(lowerValue),
-    );
-    return processMatches;
+    return context.processNames.some((name) => name.toLowerCase().includes(lowerValue));
   }
 
   if (entry.type === "service") {
     const lowerValue = value.toLowerCase();
-    const serviceMatches = edge.connections.some((connection) => {
-      const sourceService = getServiceName(connection.source_port).toLowerCase();
-      const targetService = getServiceName(connection.target_port).toLowerCase();
-      const serviceMatches = sourceService === lowerValue || targetService === lowerValue;
-      return serviceMatches;
-    });
-    return serviceMatches;
+    return context.servicePorts.some((port) => getServiceName(port).toLowerCase() === lowerValue);
   }
 
   return true;
 }
 
+function matchesEdgeCriterion(edge: EdgeFilterContext, entry: filter): boolean {
+  const ports: number[] = [];
+  const processNames: string[] = [];
+
+  for (const connection of edge.connections) {
+    ports.push(connection.source_port, connection.target_port);
+    if (connection.process_name) processNames.push(connection.process_name);
+    if (connection.source_process_name) processNames.push(connection.source_process_name);
+    if (connection.target_process_name) processNames.push(connection.target_process_name);
+  }
+
+  return matchesCriterion({
+    fqdn: edge.sourceNode.fqdn,
+    ips: [edge.sourceNode.ip, edge.targetNode.ip],
+    ports,
+    servicePorts: ports,
+    processNames,
+  }, entry);
+}
+
 function matchesNodeConnectionCriterion(node: NodeDetails, target: NodePortTarget, entry: filter): boolean {
-  const value = entry.value.trim();
-  if (!value) return true;
+  const processNames = target.processName ? [target.processName] : [];
+  const ports = [target.port, target.remote_port];
 
-  if (entry.type === "port") {
-    const port = Number(value);
-    if (Number.isNaN(port)) return true;
-    const matchesPort = port === target.port || port === target.remote_port;
-    return matchesPort;
-  }
-
-  if (entry.type === "ip") {
-    const lowerValue = value.toLowerCase();
-    const ipMatches = node.ip.toLowerCase() === lowerValue || target.ip.toLowerCase() === lowerValue;
-    return ipMatches;
-  }
-
-  if (entry.type === "fqdn") {
-    const fqdnMatches = matchesFqdn(node.fqdn, value)// || matchesFqdn(target.fqdn, value);
-    return fqdnMatches;
-  }
-
-  if (entry.type === "process") {
-    const processMatches = (target.processName ?? "").toLowerCase().includes(value.toLowerCase());
-    return processMatches;
-  }
-
-  if (entry.type === "service") {
-    const lowerValue = value.toLowerCase();
-    const localService = getServiceName(target.port).toLowerCase();
-    const remoteService = getServiceName(target.remote_port).toLowerCase();
-    const serviceMatches = localService === lowerValue || remoteService === lowerValue;
-    return serviceMatches;
-  }
-
-  return true;
+  return matchesCriterion({
+    fqdn: node.fqdn,
+    ips: [node.ip, target.ip],
+    ports,
+    servicePorts: ports,
+    processNames,
+  }, entry);
 }
 
 function normalizeFqdn(s: string): string {

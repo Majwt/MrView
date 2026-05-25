@@ -11,18 +11,18 @@ type Props = {
 
 function Filters({ filters, setFilters, fqdnSuggestions }: Props) {
   const addFilter = () => {
-    setFilters([
-      ...filters,
+    setFilters((current) => ([
+      ...current,
       { id: crypto.randomUUID(), type: "service", operation: "include", value: "" },
-    ]);
+    ]));
   };
 
   const updateFilter = (id: string, patch: Partial<Pick<filter, "operation" | "type" | "value">>) => {
-    setFilters(filters.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
+    setFilters((current) => current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
   };
 
   const removeFilter = (id: string) => {
-    setFilters(filters.filter((entry) => entry.id !== id));
+    setFilters((current) => current.filter((entry) => entry.id !== id));
   };
 
   return (
