@@ -6,38 +6,48 @@ type Props = {
   node: NodeDetails;
   visibleTargets: NodePortTarget[];
   visibleNodeConnectionCount: number;
-  onMinimize: () => void;
 };
 
 
-export default function NodeConnectionDetails({ node, visibleTargets, visibleNodeConnectionCount, onMinimize }: Props) {
+export default function NodeConnectionDetails({ node, visibleTargets, visibleNodeConnectionCount }: Props) {
+  const customerSummaryParts: string[] = [];
+  if (node.customer?.name) customerSummaryParts.push(node.customer.name);
+  if (node.customer?.id !== undefined && node.customer?.id !== null && node.customer?.id !== "" && node.customer?.id !== -1) {
+    customerSummaryParts.push(`ID ${node.customer.id}`);
+  }
+  if (node.customer?.cmdb_ci_id) customerSummaryParts.push(`CMDB ${node.customer.cmdb_ci_id}`);
+  const customerSummary = customerSummaryParts.join(" • ");
+  const hasCustomerInfo = customerSummaryParts.length > 0;
+
   return (
     <div className="details-node-info">
       <header className="details-header">
-        <span className="details-header-fqdn">{node.fqdn}</span>
-        <div className="details-header-subtitle">
+        <div className="details-header-top">
+          <span className="details-header-fqdn">{node.fqdn}</span>
+          <div className="details-header-metrics">
+            <span className="details-count-pill">{visibleTargets.length} aggregated rows</span>
+            <span className="details-count-pill emphasis">{visibleNodeConnectionCount} connections</span>
+          </div>
+        </div>
+        <div className="details-header-bottom">
           <span className="details-header-ip">{node.ip}</span>
           {node.subnet ? (
             <span className="details-header-subnet">({node.subnet})</span>
           ) : (
             <span className="details-header-subnet">(no subnet info)</span>
           )}
+          {hasCustomerInfo && (
+            <>
+              <span className="details-header-divider" aria-hidden="true">•</span>
+              <span className="details-header-customer-inline">
+                <span className="details-header-customer-label">Customer</span>
+                <span className="details-header-customer-value">{customerSummary}</span>
+              </span>
+            </>
+          )}
         </div>
-        <div className="details-header-metrics">
-          <span className="details-count-pill">{visibleTargets.length} aggregated rows</span>
-          <span className="details-count-pill emphasis">{visibleNodeConnectionCount} connections</span>
-        </div>
-        <button
-          type="button"
-          className="details-minimize-button"
-          onClick={onMinimize}
-          title="Minimize details pane"
-          aria-label="Minimize details pane"
-        >
-          <span aria-hidden="true">▾</span>
-        </button>
       </header>
-      <DetailsNote/>
+      <DetailsNote />
       {visibleTargets.length > 0 ? (
         <table className="details-table">
           <thead>

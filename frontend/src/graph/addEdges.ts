@@ -2,8 +2,21 @@ import type { GraphData } from "../types/graph";
 
 import type Graph from "graphology";
 
+function getEdgeSize(seenCount: number): number {
+
+  const baseSize = 4;
+  const growth = Math.log2(Math.max(seenCount, 1)) * 0.2
+  return baseSize + growth;
+}
+
+function getNodeSize(connectionCount: number): number {
+  const baseSize = 10;
+  const growth = Math.log2(Math.max(connectionCount, 1)) * 0.5;
+  return baseSize + growth;
+}
+
+
 /**
- *
  * Adds edges to the graph based on the provided GraphData.
  * If groupSameDirectionEdges is true, edges with the same source and target will be grouped together, and their attributes will be aggregated.
  *
@@ -16,6 +29,15 @@ export function addEdges(
   data: GraphData,
   groupSameDirectionEdges: boolean,
 ) {
+  const connectionCountByFqdn = new Map<string, number>();
+  for (const edge of data.edges) {
+    const seenCount = Math.max(edge.seen_count ?? 1, 1);
+    connectionCountByFqdn.set(edge.source_fqdn, (connectionCountByFqdn.get(edge.source_fqdn) ?? 0) + seenCount);
+    connectionCountByFqdn.set(edge.target_fqdn, (connectionCountByFqdn.get(edge.target_fqdn) ?? 0) + seenCount);
+  }
+
+
+
   if (!groupSameDirectionEdges) {
     data.edges.forEach((edge, index) => {
       const id =
@@ -26,10 +48,14 @@ export function addEdges(
         port: edge.target_port,
         process_name: edge.process_name,
         process_id: edge.pid,
-        size: 3 + Math.log(seenCount + 1),
+        size: getEdgeSize(seenCount),
       });
     });
 
+    for (const [fqdn, count] of connectionCountByFqdn) {
+      if (!graph.hasNode(fqdn)) continue;
+      graph.setNodeAttribute(fqdn, "size", getNodeSize(count));
+    }
     return;
   }
 
@@ -47,11 +73,16 @@ export function addEdges(
     const totalSeenCount = edges.reduce((sum, edge) => sum + Math.max(edge.seen_count ?? 1, 1), 0);
 
     graph.addEdgeWithKey(key, first.source_fqdn, first.target_fqdn, {
-      size: 3 + 2 * Math.log(totalSeenCount + 1),
       count: totalSeenCount,
       connections: edges,
       label: `${totalSeenCount} connections`,
       type: "straight",
+      size: getEdgeSize(totalSeenCount),
     });
+  }
+
+  for (const [fqdn, count] of connectionCountByFqdn) {
+    if (!graph.hasNode(fqdn)) continue;
+    graph.setNodeAttribute(fqdn, "size", getNodeSize(count));
   }
 }

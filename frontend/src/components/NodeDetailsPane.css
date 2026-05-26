@@ -11,69 +11,16 @@
   border-radius: 1rem;
   border: 1px solid var(--border);
   overflow: hidden;
+  padding: 1rem;
 }
 
-
-.details-panel.minimized {
-  height: 2.5rem;
-  border-radius: 0;
-}
 
 .details-content {
   position: relative;
   height: 97%;
   min-height: 0;
-  padding: 1rem;
   overflow-x: auto;
   overflow-y: auto;
-}
-
-.details-minimize-button {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  width: 1.75rem;
-  height: 1.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-control-strong);
-  color: var(--text-h);
-  padding: 0;
-  cursor: pointer;
-}
-
-.details-minimize-button:hover {
-  background: color-mix(in oklab, var(--border) 30%, transparent);
-}
-
-.details-minimize-button span {
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.details-minimized-strip {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-left: 1px solid var(--border);
-  background: color-mix(in oklab, var(--border) 55%, transparent);
-  color: var(--text-h);
-  cursor: pointer;
-  padding: 0;
-}
-
-.details-minimized-strip:hover {
-  background: color-mix(in oklab, var(--border) 75%, transparent);
-}
-
-.details-minimized-strip span {
-  display: block;
-  font-size: 0.7rem;
-  line-height: 1;
-  opacity: 0.85;
 }
 
 .details-close {
@@ -85,41 +32,73 @@
 }
 .details-header {
   position: relative;
-  padding: 0.7rem 0.9rem;
-  padding-right: 2.8rem;
+  padding: 0.4rem 0.55rem;
   border: 1px solid var(--primary-border);
   background: color-mix(in oklab, var(--bg) 84%, var(--primary-bg) 16%);
-  border-radius: 0.75rem;
+  border-radius: 0.5rem;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 0.2rem;
-  margin-bottom: 0.9rem;
+  margin-bottom: 0.6rem;
+}
+
+.details-header-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.details-header-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
 .details-header-fqdn {
-  font-size: 1.1rem;
+  font-size: 0.94rem;
   font-weight: 650;
   color: color-mix(in oklab, var(--text-h) 72%, var(--primary) 28%);
   letter-spacing: 0.01em;
   word-break: break-word;
 }
 
-.details-header-subtitle {
-  display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
+.details-header-customer-label {
+  font-weight: 600;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+  color: color-mix(in oklab, var(--text-h) 72%, transparent);
+}
+
+.details-header-customer-inline {
+  display: inline-flex;
   flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.details-header-customer-value {
+  font-size: 0.7rem;
+  color: color-mix(in oklab, var(--text-h) 82%, transparent);
+}
+
+.details-header-divider {
+  color: color-mix(in oklab, var(--text-h) 55%, transparent);
 }
 
 .details-header-ip {
-  font-size: 0.9rem;
+  font-size: 0.74rem;
   font-weight: 520;
   color: color-mix(in oklab, var(--text-h) 90%, #ffffff 10%);
 }
 
 .details-header-subnet {
-  font-size: 0.8rem;
+  font-size: 0.66rem;
   font-weight: 400;
   color: color-mix(in oklab, var(--text-h) 65%, transparent);
 }
@@ -127,15 +106,15 @@
 .details-header-metrics {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.15rem;
+  gap: 0.25rem;
+  margin-top: 0;
 }
 
 .details-count-pill {
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.08rem 0.45rem;
-  font-size: 0.75rem;
+  padding: 0.04rem 0.3rem;
+  font-size: 0.62rem;
   color: color-mix(in oklab, var(--text-h) 86%, transparent);
   background: color-mix(in oklab, var(--surface-control-strong) 35%, transparent);
 }

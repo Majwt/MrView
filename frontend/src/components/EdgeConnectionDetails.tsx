@@ -11,32 +11,24 @@ type Props = {
   edge: EdgeDetails;
   aggregatedVisibleEdgeConnections: AggregatedEdgeConnection[];
   visibleEdgeConnectionCount: number;
-  onMinimize: () => void;
 };
 
 
 
-export default function EdgeConnectionDetails({ edge, aggregatedVisibleEdgeConnections, visibleEdgeConnectionCount, onMinimize }: Props) {
+export default function EdgeConnectionDetails({ edge, aggregatedVisibleEdgeConnections, visibleEdgeConnectionCount }: Props) {
   return (
     <div className="details-node-info">
       <header className="details-header">
-        <span className="details-header-fqdn">{edge.source_fqdn} → {edge.target_fqdn}</span>
-        <div className="details-header-subtitle">
+        <div className="details-header-top">
+          <span className="details-header-fqdn">{edge.source_fqdn} → {edge.target_fqdn}</span>
+          <div className="details-header-metrics">
+            <span className="details-count-pill">{aggregatedVisibleEdgeConnections.length} aggregated rows</span>
+            <span className="details-count-pill emphasis">{visibleEdgeConnectionCount} connections</span>
+          </div>
+        </div>
+        <div className="details-header-bottom">
           <span className="details-header-ip">{edge.source_ip} → {edge.target_ip}</span>
         </div>
-        <div className="details-header-metrics">
-          <span className="details-count-pill">{aggregatedVisibleEdgeConnections.length} aggregated rows</span>
-          <span className="details-count-pill emphasis">{visibleEdgeConnectionCount} connections</span>
-        </div>
-        <button
-          type="button"
-          className="details-minimize-button"
-          onClick={onMinimize}
-          title="Minimize details pane"
-          aria-label="Minimize details pane"
-        >
-          <span aria-hidden="true">▾</span>
-        </button>
       </header>
       <DetailsNote/>
       {aggregatedVisibleEdgeConnections.length > 0 ? (

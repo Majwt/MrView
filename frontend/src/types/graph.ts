@@ -1,6 +1,15 @@
+export type CustomerInfo = {
+  name: string;
+  id: number | string;
+  cmdb_ci_id: string;
+};
+
 export type GraphNode = {
   fqdn: string;
   ip: string;
+  customer?: CustomerInfo;
+  subnet?: string;
+  mac_address?: string;
 };
 
 export type GraphEdge = {
@@ -81,6 +90,7 @@ export type NodeDetails = {
   fqdn: string;
   color: string;
   subnet: string;
+  customer?: CustomerInfo;
   portTargets: NodePortTarget[];
   size: number;
   x: number;

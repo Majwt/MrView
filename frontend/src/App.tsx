@@ -3,6 +3,7 @@ import GraphView from './components/GraphView'
 import brand from "./config/brand";
 import type { EdgeDetails, GraphCursor, GraphData, NodeDetails } from './types/graph';
 import { applyGraphDelta, fetchGraphDelta, fetchGraphSnapshot } from './api/graphApi';
+import { normalizeGraphData } from './graph/normalizeGraphData';
 import NodeDetailsPanel from './components/NodeDetailsPane';
 import AppHeader from './components/AppHeader';
 import Filters from './components/Filters';
@@ -73,7 +74,7 @@ function App() {
     async function loadGraph() {
       const snapshot = await fetchGraphSnapshot();
       if (cancelled) return;
-      setData({ nodes: snapshot.nodes, edges: snapshot.edges });
+      setData(normalizeGraphData({ nodes: snapshot.nodes, edges: snapshot.edges }));
       setGraphCursor(snapshot.cursor);
       setLastFetchedAt(new Date());
     }
@@ -101,23 +102,16 @@ function App() {
         const delta = await fetchGraphDelta(currentCursor);
         if (!active) return;
 
-        setData((currentData) => {
-          if (!currentData) {
-            return {
-              nodes: delta.upsert_nodes,
-              edges: delta.upsert_edges,
-            };
-          }
-
-          return applyGraphDelta(currentData, delta);
-        });
+        setData((currentData) => normalizeGraphData(
+          applyGraphDelta(currentData ?? { nodes: [], edges: [] }, delta),
+        ));
         setGraphCursor(delta.cursor);
         setLastFetchedAt(new Date());
       } catch {
         if (!active) return;
         const snapshot = await fetchGraphSnapshot();
         if (!active) return;
-        setData({ nodes: snapshot.nodes, edges: snapshot.edges });
+        setData(normalizeGraphData({ nodes: snapshot.nodes, edges: snapshot.edges }));
         setGraphCursor(snapshot.cursor);
         setLastFetchedAt(new Date());
       } finally {
@@ -170,7 +164,7 @@ function App() {
             <SearchBar query={searchQuery} setQuery={setSearchQuery} suggestions={fqdnSuggestions} onSubmit={handleSearchSubmit} />
             <Filters filters={filters} setFilters={setFilters} fqdnSuggestions={fqdnSuggestions} />
           </div>
-          <span className="last-fetch-info">{`Updated at ${lastFetchedAt ? lastFetchedAt.toLocaleTimeString(["sv-se"], { hour: "2-digit", minute: "2-digit" }) : "--:--"}`}</span>
+          <span className="last-fetch-info">{`Updated at ${lastFetchedAt ? lastFetchedAt.toLocaleTimeString(["sv-se"], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--"}`}</span>
         </div>
       </section>
     </main>

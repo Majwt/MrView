@@ -29,9 +29,14 @@ app.UseHttpsRedirection();
 app.Logger.LogInformation("Starting API v{0}", typeof(Program).Assembly.GetName().Version);
 
 var configuredTableName =
-    builder.Configuration["database:table_name"]
+    builder.Configuration["database:edge_table_name"]
     ?? throw new InvalidOperationException(
-        "Database table name is not configured! Change the 'database:table_name' setting in appsettings.json or set the environment variable 'DATABASE__TABLE_NAME'."
+        "Database table name is not configured! Change the 'database:edge_table_name' setting in appsettings.json or set the environment variable 'DATABASE__ROW_TABLE_NAME'."
+    );
+var configuredNodeTableName =
+    builder.Configuration["database:node_table_name"]
+    ?? throw new InvalidOperationException(
+        "Database node table name is not configured! Change the 'database:node_table_name' setting in appsettings.json or set the environment variable 'DATABASE__NODE_TABLE_NAME'."
     );
 var configuredSeenCountThreshold = builder.Configuration["database:seen_count_threshold"] ?? "0";
 if (configuredSeenCountThreshold.Any(c => !char.IsDigit(c)))
@@ -41,13 +46,35 @@ if (configuredSeenCountThreshold.Any(c => !char.IsDigit(c)))
     );
 }
 var safeTableName = QuoteMultipartIdentifier(configuredTableName);
+var safeNodeTableName = QuoteMultipartIdentifier(configuredNodeTableName);
 var graphSelectSql = """
     SELECT id, endpoint_a, endpoint_b, service_port,
         pid, process_name, seen_count,
         source_fqdn, source_ip, source_port,
         source_pid, source_process_name,
         target_fqdn, target_ip, target_port,
-        target_pid, target_process_name, last_seen
+        target_pid, target_process_name, last_seen, first_seen
+    """;
+var nodeSelectSql = """
+    SELECT
+        fqdn = Fqdn,
+        address_ipv4 = AddressIPv4,
+        subnet = Subnet,
+        cmdb_ci_id = CmdbCiId,
+        customer = Customer,
+        customer_id = CustomerID,
+        date_added = MIN(DateAdded)
+    """;
+var nodeQuerySql = $"""
+    {nodeSelectSql}
+    FROM {safeNodeTableName}
+    GROUP BY
+        Fqdn,
+        AddressIPv4,
+        Subnet,
+        CmdbCiId,
+        Customer,
+        CustomerID
     """;
 var graphSnapshotSql = $"""
     {graphSelectSql}
@@ -77,8 +104,10 @@ app.MapGet(
         await using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync(cancellationToken);
 
-        await using var cmd = new SqlCommand(graphSnapshotSql, conn);
-        var (nodes, edges, cursor) = await ReadGraphQueryAsync(cmd, cancellationToken);
+        await using var edgeCmd = new SqlCommand(graphSnapshotSql, conn);
+        var (edges, cursor) = await ReadEdgesQueryAsync(edgeCmd, cancellationToken);
+        await using var nodeCmd = new SqlCommand(nodeQuerySql, conn);
+        var nodes = await ReadNodesQueryAsync(nodeCmd, cancellationToken);
 
         return Results.Ok(new GraphSnapshotResponse(nodes, edges, cursor));
     }
@@ -93,8 +122,10 @@ app.MapGet(
         await using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync(cancellationToken);
 
-        await using var cmd = new SqlCommand(graphSnapshotSql, conn);
-        var (nodes, edges, _) = await ReadGraphQueryAsync(cmd, cancellationToken);
+        await using var edgeCmd = new SqlCommand(graphSnapshotSql, conn);
+        var (edges, _) = await ReadEdgesQueryAsync(edgeCmd, cancellationToken);
+        await using var nodeCmd = new SqlCommand(nodeQuerySql, conn);
+        var nodes = await ReadNodesQueryAsync(nodeCmd, cancellationToken);
         return Results.Ok(new GraphResponse(nodes, edges));
     }
 );
@@ -118,15 +149,18 @@ app.MapGet(
         await using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync(cancellationToken);
 
-        await using var cmd = new SqlCommand(graphDeltaSql, conn);
-        cmd.Parameters.Add(new SqlParameter("@since_last_seen", System.Data.SqlDbType.DateTime2) { Value = sinceLastSeen });
-        cmd.Parameters.Add(new SqlParameter("@since_row_id", System.Data.SqlDbType.BigInt) { Value = sinceRowId });
+        await using var edgeCmd = new SqlCommand(graphDeltaSql, conn);
+        edgeCmd.Parameters.Add(new SqlParameter("@since_last_seen", System.Data.SqlDbType.DateTime2) { Value = sinceLastSeen });
+        edgeCmd.Parameters.Add(new SqlParameter("@since_row_id", System.Data.SqlDbType.BigInt) { Value = sinceRowId });
 
-        var (nodes, edges, cursor) = await ReadGraphQueryAsync(cmd, cancellationToken);
+        var (edges, cursor) = await ReadEdgesQueryAsync(edgeCmd, cancellationToken);
         if (edges.Count == 0)
         {
             cursor = new GraphCursor(sinceLastSeen, sinceRowId);
         }
+
+        await using var nodeCmd = new SqlCommand(nodeQuerySql, conn);
+        var nodes = await ReadNodesQueryAsync(nodeCmd, cancellationToken);
 
         return Results.Ok(new GraphDeltaResponse(
             UpsertNodes: nodes,
@@ -156,11 +190,9 @@ static bool TryParseCursor(string sinceLastSeenRaw, string sinceRowIdRaw, out Da
     return hasValidTimestamp && hasValidRowId;
 }
 
-static async Task<(List<Node> Nodes, List<Edge> Edges, GraphCursor Cursor)> ReadGraphQueryAsync(SqlCommand cmd, CancellationToken cancellationToken)
+static async Task<(List<Edge> Edges, GraphCursor Cursor)> ReadEdgesQueryAsync(SqlCommand cmd, CancellationToken cancellationToken)
 {
-    var nodes = new List<Node>();
     var edges = new List<Edge>();
-    var seenNodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     var cursor = new GraphCursor(DateTime.MinValue, 0);
 
     await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -175,7 +207,6 @@ static async Task<(List<Node> Nodes, List<Edge> Edges, GraphCursor Cursor)> Read
         {
             continue;
         }
-
         var processName = reader["process_name"] as string;
         var pid = reader["pid"] == DBNull.Value ? -1 : Convert.ToInt32(reader["pid"]);
         var sourcePort = reader["source_port"] == DBNull.Value ? 0 : Convert.ToInt32(reader["source_port"]);
@@ -195,16 +226,6 @@ static async Task<(List<Node> Nodes, List<Edge> Edges, GraphCursor Cursor)> Read
             ? DateTime.MinValue
             : Convert.ToDateTime(reader["last_seen"]);
         var rowId = reader["id"] == DBNull.Value ? 0 : Convert.ToInt64(reader["id"]);
-
-        if (seenNodes.Add(sourceFqdn))
-        {
-            nodes.Add(new Node(sourceFqdn, sourceIp));
-        }
-
-        if (seenNodes.Add(targetFqdn))
-        {
-            nodes.Add(new Node(targetFqdn, targetIp));
-        }
 
         edges.Add(
             new Edge(
@@ -229,7 +250,46 @@ static async Task<(List<Node> Nodes, List<Edge> Edges, GraphCursor Cursor)> Read
         cursor = new GraphCursor(lastSeen, rowId);
     }
 
-    return (nodes, edges, cursor);
+    return (edges, cursor);
+}
+
+static async Task<List<Node>> ReadNodesQueryAsync(SqlCommand cmd, CancellationToken cancellationToken)
+{
+    var nodes = new List<Node>();
+    var seenNodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+    while (await reader.ReadAsync(cancellationToken))
+    {
+        if (
+            reader["fqdn"] is not string fqdn
+            || reader["address_ipv4"] is not string ip
+        )
+        {
+            continue;
+        }
+
+        var subnet = reader["subnet"] as string;
+        var cmdbCiId = reader["cmdb_ci_id"] as string;
+        var customerName = reader["customer"] as string;
+        var customerId = reader["customer_id"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["customer_id"]);
+        var firstSeen = reader["date_added"] == DBNull.Value
+            ? DateTime.MinValue
+            : Convert.ToDateTime(reader["date_added"]);
+
+        var customer = new Customer(
+            Name: customerName ?? "Unknown",
+            CmdbCiId: cmdbCiId ?? "Unknown",
+            Id: customerId ?? -1
+        );
+
+        if (seenNodes.Add(fqdn))
+        {
+            nodes.Add(new Node(fqdn, ip, subnet, customer, firstSeen));
+        }
+    }
+
+    return nodes;
 }
 
 static string QuoteMultipartIdentifier(string configuredIdentifier)
