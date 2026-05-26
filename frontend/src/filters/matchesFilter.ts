@@ -73,7 +73,7 @@ function evaluateFilters(filters: filter[], matchesEntry: (entry: filter) => boo
 }
 
 type CriterionContext = {
-  fqdn: string;
+  fqdns: string[];
   ips: string[];
   ports: number[];
   servicePorts: number[];
@@ -96,7 +96,7 @@ function matchesCriterion(context: CriterionContext, entry: filter): boolean {
   }
 
   if (entry.type === "fqdn") {
-    return matchesFqdn(context.fqdn, value);
+    return context.fqdns.some((fqdn) => matchesFqdn(fqdn, value));
   }
 
   if (entry.type === "process") {
@@ -124,7 +124,7 @@ function matchesEdgeCriterion(edge: EdgeFilterContext, entry: filter): boolean {
   }
 
   return matchesCriterion({
-    fqdn: edge.sourceNode.fqdn,
+    fqdns: [edge.sourceNode.fqdn, edge.targetNode.fqdn],
     ips: [edge.sourceNode.ip, edge.targetNode.ip],
     ports,
     servicePorts: ports,
@@ -137,7 +137,7 @@ function matchesNodeConnectionCriterion(node: NodeDetails, target: NodePortTarge
   const ports = [target.port, target.remote_port];
 
   return matchesCriterion({
-    fqdn: node.fqdn,
+    fqdns: [node.fqdn, target.fqdn],
     ips: [node.ip, target.ip],
     ports,
     servicePorts: ports,
