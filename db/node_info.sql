@@ -1,6 +1,6 @@
 
 
-CREATE TABLE [test].[node_info] (
+CREATE TABLE [dbo].[node_info] (
     [Id] [bigint] IDENTITY(1,1) NOT NULL,
     [CmdbCiId] [nvarchar](128) NULL,
     [Customer] [nvarchar](100) NULL,

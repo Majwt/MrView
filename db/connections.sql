@@ -1,6 +1,6 @@
 
 
-CREATE TABLE [test].[connections] (
+CREATE TABLE [dbo].[connections] (
     [Id] [bigint] IDENTITY(1,1) NOT NULL,
 
     [HostName] [nvarchar](255) NOT NULL,

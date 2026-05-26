@@ -1,5 +1,5 @@
 
-CREATE OR ALTER PROCEDURE [test].[refresh_top_connections]
+CREATE OR ALTER PROCEDURE [dbo].[refresh_top_connections]
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -8,7 +8,7 @@ BEGIN
     BEGIN TRANSACTION;
 
     
-    DELETE FROM test.top_connections;
+    DELETE FROM [dbo].[top_connections];
 
     ;WITH known_ports AS (
         SELECT *
@@ -129,7 +129,7 @@ BEGIN
 
                 ELSE IIF(c.LocalPort <= c.RemotePort, c.LocalPort, c.RemotePort)
             END AS service_port
-        FROM [test].[connections] AS c
+        FROM [dbo].[connections] AS c
         LEFT JOIN known_ports AS sp
             ON UPPER(c.Protocol) = sp.protocol
            AND c.LocalPort = sp.port
@@ -228,7 +228,7 @@ BEGIN
             ) AS rn
         FROM normalized
     )
-    MERGE [test].[top_connections] AS t
+    MERGE [dbo].[top_connections] AS t
     USING (
         SELECT
             lr.endpoint_a,
