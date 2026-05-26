@@ -4,7 +4,6 @@ CREATE TABLE [test].[connections] (
     [Id] [bigint] IDENTITY(1,1) NOT NULL,
 
     [HostName] [nvarchar](255) NOT NULL,
-    [Fqdn] [nvarchar](255) NOT NULL,
 
     [ProcessName] [nvarchar](255) NULL,
     [ProcessID] [int] NULL,
