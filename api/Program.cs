@@ -13,8 +13,10 @@ builder.Services.ConfigureHttpJsonOptions(options =>
         .Json
         .JsonNamingPolicy
         .SnakeCaseLower;
+    options.SerializerOptions.Converters.Add(new SqlDateTimeJsonConverter());
 });
 builder.Configuration.AddEnvironmentVariables();
+
 
 builder
     .Services.AddOptions<DatabaseOptions>()
@@ -75,13 +77,26 @@ app.MapGet(
     "/api/graph",
     async (string? lastSeen, long? lastEdgeId, long? lastNodeId, GraphService graphService) =>
     {
+
+        var correct = DateTime.TryParse(lastSeen, out DateTime parsedLastSeen);
+        if (!correct)
+        {
+            parsedLastSeen = DateTime.UnixEpoch;
+            app.Logger.LogWarning(
+                "Invalid lastSeen value: {0}. Defaulting to UnixEpoch.",
+                lastSeen
+            );
+        }
+
+
         var cursor = new GraphCursor(
-            lastSeen ?? DateTime.MinValue.ToString("o"),
+            parsedLastSeen,
             lastEdgeId ?? 0,
             lastNodeId ?? 0
         );
 
-        return await graphService.GetGraphAsync();
+
+        return await graphService.GetGraphAsync(cursor);
     }
 );
 

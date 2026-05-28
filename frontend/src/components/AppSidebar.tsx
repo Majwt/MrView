@@ -1,10 +1,6 @@
 // src/components/AppSidebar.tsx
 
-import {
-  Network,
-  Settings,
-  Users,
-} from "lucide-react"
+import { Network, Settings, Users } from "lucide-react";
 
 import {
   Sidebar,
@@ -17,8 +13,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import { ThemeToggle } from "./theme-toggle"
+} from "@/components/ui/sidebar";
+import { ThemeToggle } from "./theme-toggle";
 
 const items = [
   {
@@ -33,8 +29,8 @@ const items = [
   {
     title: "Settings",
     icon: Settings,
-  }
-]
+  },
+];
 
 export function AppSidebar() {
   return (
@@ -42,9 +38,7 @@ export function AppSidebar() {
       <SidebarHeader>
         <div className="px-2 py-2">
           <div className="text-lg font-semibold">AxiLANswer</div>
-          <div className="text-xs text-muted-foreground">
-            Network topology
-          </div>
+          <div className="text-xs text-muted-foreground">Network topology</div>
         </div>
       </SidebarHeader>
 
@@ -68,13 +62,10 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <div className="flex flex-row items-center gap-2 px-2 py-2">
-          <div className="px-2 py-2 text-xs text-muted-foreground">
-            v0.1.0
-          </div>
+          <div className="px-2 py-2 text-xs text-muted-foreground">v0.1.0</div>
           <ThemeToggle />
         </div>
       </SidebarFooter>
-
     </Sidebar>
-  )
+  );
 }

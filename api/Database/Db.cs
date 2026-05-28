@@ -86,7 +86,7 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen);
+        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen.ToString(Config.datetimeFormat));
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
         command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
         await using var reader = await command.ExecuteReaderAsync();
@@ -123,7 +123,7 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen);
+        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen.ToString(Config.datetimeFormat));
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
         command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
         command.Parameters.AddWithValue("@CustomerId", customerId);
@@ -180,12 +180,6 @@ public class Db
         {
             count++;
 
-            _logger.LogInformation(
-                "Edge row found. Id={Id}, LastSeen={LastSeen}, SeenCount={SeenCount}",
-                reader.GetInt64(reader.GetOrdinal("id")),
-                reader.GetDateTime(reader.GetOrdinal("last_seen")),
-                reader.GetInt64(reader.GetOrdinal("seen_count"))
-            );
             var id = reader.GetInt64(idOrdinal);
 
             var endpointA = reader.GetString(endpointAOrdinal);
@@ -267,7 +261,6 @@ public class Db
             );
             edges.Add(edge);
         }
-        _logger.LogInformation("Total edges parsed: {Count}", count);
         return edges;
     }
 
@@ -305,7 +298,7 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen);
+        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen.ToString(Config.datetimeFormat));
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenNodeId);
         await using var reader = await command.ExecuteReaderAsync();
 
@@ -336,9 +329,10 @@ public class Db
                 ORDER BY LastSeen, Id;
             """;
 
+
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@CustomerId", customerId);
-        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen);
+        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen.ToString(Config.datetimeFormat));
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenNodeId);
         await using var reader = await command.ExecuteReaderAsync();
 

@@ -1,10 +1,10 @@
 // src/features/graph/force-supervisor-layout.ts
 
-import Graph from "graphology"
-import Sigma from "sigma"
-import ForceSupervisor from "graphology-layout-force/worker"
+import Graph from "graphology";
+import Sigma from "sigma";
+import ForceSupervisor from "graphology-layout-force/worker";
 
-import type { MouseCoords, SigmaNodeEventPayload } from "sigma/types"
+import type { MouseCoords, SigmaNodeEventPayload } from "sigma/types";
 
 export function forceSupervisorLayout(renderer: Sigma, graph: Graph) {
   const layout = new ForceSupervisor(graph, {
@@ -13,25 +13,20 @@ export function forceSupervisorLayout(renderer: Sigma, graph: Graph) {
       attraction: 0.0005,
       repulsion: 1,
     },
-  })
+  });
 
-  const cleanupDrag = enableNodeDragging(renderer, graph, layout)
+  const cleanupDrag = enableNodeDragging(renderer, graph, layout);
 
-  layout.start()
+  layout.start();
 
   return () => {
-    cleanupDrag()
-    layout.stop()
-    layout.kill()
-  }
+    cleanupDrag();
+    layout.stop();
+    layout.kill();
+  };
 }
 
-
-function enableNodeDragging(
-  renderer: Sigma,
-  graph: Graph,
-  supervisor?: ForceSupervisor
-) {
+function enableNodeDragging(renderer: Sigma, graph: Graph, supervisor?: ForceSupervisor) {
   let draggedNode: string | null = null;
   let isDragging = false;
 

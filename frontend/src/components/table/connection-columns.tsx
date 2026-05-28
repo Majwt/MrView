@@ -1,29 +1,30 @@
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@tanstack/react-table";
 
 export type Connection = {
-  id: string
+  id: string;
 
-  direction: "Incoming" | "Outgoing" | "Unknown"
+  direction: "Incoming" | "Outgoing" | "Unknown";
 
-  localHost: string
-  localIp: string
+  localHost: string;
+  localIp: string;
 
-  localService: string
-  localPort: number
-  localProcess: string
+  localService: string;
+  localPort: number;
+  localProcess: string;
 
-  peerHost: string
-  peerIp: string
+  peerHost: string;
+  peerIp: string;
 
-  peerService: string
-  peerPort: number
+  peerService: string;
+  peerPort: number;
 
-  connections: number
+  connections: number;
 
-  lastSeen: string
-}
+  lastSeen: string;
+};
 
-export const columns: ColumnDef<Connection>[] = [
+// These are when a node is selected and we want to show all connections related to that node
+export const connectionColumns: ColumnDef<Connection>[] = [
   {
     accessorKey: "direction",
     header: "Direction",
@@ -64,4 +65,4 @@ export const columns: ColumnDef<Connection>[] = [
     accessorKey: "lastSeen",
     header: "Last Seen",
   },
-]
+];

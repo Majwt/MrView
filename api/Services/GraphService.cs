@@ -20,16 +20,16 @@ public class GraphService
 
     public async Task<GraphResponse> GetGraphAsync(int customerId = -1)
     {
-        var dbEdgesTask = db.getEdgesAsync(new GraphCursor(DateTime.MinValue.ToString("o"), 0, 0));
-        var dbNodesTask = db.getNodesAsync(new GraphCursor(DateTime.MinValue.ToString("o"), 0, 0));
+        var cursor = new GraphCursor(DateTime.UnixEpoch, 0, 0);
+        return await GetGraphAsync(cursor, customerId);
+    }
+
+    public async Task<GraphResponse> GetGraphAsync(GraphCursor cursor, int customerId = -1)
+    {
+        var dbEdgesTask = db.getEdgesAsync(cursor);
+        var dbNodesTask = db.getNodesAsync(cursor);
 
         await Task.WhenAll(dbEdgesTask, dbNodesTask);
-        _logger.LogTrace(
-            "Retrieved {0} edges and {1} nodes from the database for customer ID {2}",
-            dbEdgesTask.Result.Count(),
-            dbNodesTask.Result.Count(),
-            customerId
-        );
         var dbNodes = dbNodesTask.Result;
         var dbEdges = dbEdgesTask.Result;
 
@@ -37,8 +37,9 @@ public class GraphService
 
         var edges = ToEdgeDtos(dbEdges);
 
-        var nextCursor = getNextCursor(dbNodes, dbEdges);
 
+
+        var nextCursor = getNextCursor(cursor,dbNodes, dbEdges);
 
         return new GraphResponse(
             nodes,
@@ -47,11 +48,6 @@ public class GraphService
             new List<string>(), // Not implemented
             nextCursor
         );
-    }
-
-    public async Task<GraphResponse> GetGraphAsync(GraphCursor cursor, int customerId = -1)
-    {
-        return await GetGraphAsync(customerId);
     }
 
     private static IEnumerable<NodeDto> ToNodeDtos(IEnumerable<NodeEntity> nodes)
@@ -100,7 +96,8 @@ public class GraphService
         return dtos;
     }
 
-    private static GraphCursor getNextCursor(
+    private GraphCursor getNextCursor(
+        GraphCursor currentCursor,
         IEnumerable<NodeEntity> nodes,
         IEnumerable<EdgeEntity> edges
     )
@@ -120,9 +117,18 @@ public class GraphService
                 : (
                     lastSeenNode != null
                         ? lastSeenNode.LastSeen
-                        : (lastSeenEdge != null ? lastSeenEdge.LastSeen : DateTime.MinValue)
+                        : (lastSeenEdge != null ? lastSeenEdge.LastSeen : DateTime.UnixEpoch)
                 );
+        _logger.LogTrace(
+            "Calculated next cursor with lastSeen: {0}, maxEdgeId: {1}, maxNodeId: {2}",
+            lastSeen.ToString(Config.datetimeFormat),
+            maxEdgeId,
+            maxNodeId
+        );
+        var maxLastSeen = currentCursor.LastSeen > lastSeen ? currentCursor.LastSeen : lastSeen;
+        var maxMaxEdgeId = currentCursor.LastSeen == maxLastSeen ? Math.Max(currentCursor.LastSeenEdgeId, maxEdgeId) : maxEdgeId;
+        var maxMaxNodeId = currentCursor.LastSeen == maxLastSeen ? Math.Max(currentCursor.LastSeenNodeId, maxNodeId) : maxNodeId;
 
-        return new GraphCursor(lastSeen.ToString("o"), maxEdgeId, maxNodeId);
+        return new GraphCursor(maxLastSeen, maxMaxEdgeId, maxMaxNodeId);
     }
 }
