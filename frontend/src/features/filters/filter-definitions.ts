@@ -9,17 +9,21 @@ export type FilterFieldDefinition = {
 };
 
 export const filterFields: FilterFieldDefinition[] = [
-  { label: "FQDN", value: "fqdn", target: "node", valueType: "text" },
+  { label: "FQDN", value: "fqdn", target: "both", valueType: "text" },
   { label: "Hostname", value: "hostname", target: "node", valueType: "text" },
-  { label: "IP", value: "ip", target: "node", valueType: "text" },
+  { label: "IP", value: "ip", target: "both", valueType: "text" },
   { label: "MAC address", value: "mac", target: "node", valueType: "text" },
   { label: "Customer", value: "customer", target: "node", valueType: "text" },
-  { label: "Distinct edges", value: "distinct_edges", target: "node", valueType: "number" },
-  { label: "Connections", value: "connections", target: "node", valueType: "number" },
-  { label: "First seen", value: "first_seen", target: "node", valueType: "date" },
-  { label: "Last seen", value: "last_seen", target: "node", valueType: "date" },
-  { label: "Source IP", value: "source_ip", target: "connection", valueType: "text" },
-  { label: "Target IP", value: "target_ip", target: "connection", valueType: "text" },
+  { label: "# Distinct edges", value: "distinct_edges", target: "node", valueType: "number" },
+  { label: "# Connections", value: "connections", target: "node", valueType: "number" },
+  { label: "First seen", value: "first_seen", target: "both", valueType: "date" },
+  { label: "Last seen", value: "last_seen", target: "both", valueType: "date" },
+  {
+    label: "Process",
+    value: "process_name",
+    target: "connection",
+    valueType: "text",
+  },
   {
     label: "Protocol",
     value: "protocol",
@@ -33,8 +37,6 @@ export const filterFields: FilterFieldDefinition[] = [
   { label: "Service name", value: "service_name", target: "connection", valueType: "text" },
   { label: "Service port", value: "service_port", target: "connection", valueType: "number" },
   { label: "Seen count", value: "seen_count", target: "connection", valueType: "number" },
-  { label: "First seen", value: "edge_first_seen", target: "connection", valueType: "date" },
-  { label: "Last seen", value: "edge_last_seen", target: "connection", valueType: "date" },
 ];
 
 export const filterOperators: { label: string; value: FilterOperator }[] = [
@@ -58,12 +60,14 @@ export function getFilterFieldDefinition(field: FilterField) {
   return filterFields.find((definition) => definition.value === field) ?? filterFields[0];
 }
 
-export function getFilterFieldsForTarget(target: FilterTarget) {
-  return filterFields.filter((definition) => definition.target === target);
-}
-
 export function getFilterTarget(field: FilterField) {
   return getFilterFieldDefinition(field).target;
+}
+
+export function filterAppliesToTarget(field: FilterField, target: Exclude<FilterTarget, "both">) {
+  const filterTarget = getFilterTarget(field);
+
+  return filterTarget === "both" || filterTarget === target;
 }
 
 export function getFilterOperatorLabel(operator: FilterOperator) {

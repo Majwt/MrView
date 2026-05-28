@@ -1,13 +1,18 @@
 import type { ColumnDef } from "@tanstack/react-table";
 
+import { DateCell } from "./date-cell";
+import { formatTableDate } from "./format-date";
+
 export type TableConnection = {
   id: string;
   source: string;
   sourceIp: string;
   sourcePort: number;
+  sourceProcess: string;
   target: string;
   targetIp: string;
   targetPort: number;
+  targetProcess: string;
   protocol: string;
   serviceName: string;
   seenCount: number;
@@ -17,32 +22,40 @@ export type TableConnection = {
 
 export const connectionColumns: ColumnDef<TableConnection>[] = [
   {
+    accessorKey: "protocol",
+    header: "TCP/UDP",
+  },
+  {
     accessorKey: "source",
-    header: "Source",
+    header: "Local",
   },
   {
     accessorKey: "sourceIp",
-    header: "Source IP",
+    header: "Local IP",
   },
   {
     accessorKey: "sourcePort",
-    header: "Source port",
+    header: "Local port",
+  },
+  {
+    accessorKey: "sourceProcess",
+    header: "Local proc",
   },
   {
     accessorKey: "target",
-    header: "Target",
+    header: "Peer",
   },
   {
     accessorKey: "targetIp",
-    header: "Target IP",
+    header: "Peer IP",
   },
   {
     accessorKey: "targetPort",
-    header: "Target port",
+    header: "Peer port",
   },
   {
-    accessorKey: "protocol",
-    header: "Protocol",
+    accessorKey: "targetProcess",
+    header: "Peer proc",
   },
   {
     accessorKey: "serviceName",
@@ -53,11 +66,12 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
     header: "Seen count",
   },
   {
-    accessorKey: "firstSeen",
-    header: "First seen",
-  },
-  {
     accessorKey: "lastSeen",
     header: "Last seen",
+    cell: ({ row, getValue }) => {
+      const firstSeen = formatTableDate(row.original.firstSeen);
+
+      return <DateCell title={`First seen: ${firstSeen}`} value={getValue()} />;
+    },
   },
 ];

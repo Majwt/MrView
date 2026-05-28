@@ -10,6 +10,7 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import type { GraphSnapshot } from "./features/graph/types";
 import { fetchGraphDelta, fetchGraphSnapshot } from "./api/graph-api";
 import { applyGraphDelta } from "./features/graph/apply-graph-delta";
+import { normalizeGraphSnapshot } from "./features/graph/normalize-graph-snapshot";
 import FilterBar from "./components/FilterBar";
 import { filtersReducer, initialFilters } from "./features/filters/filters-reducer";
 import { applyGraphFilters } from "./features/filters/apply-graph-filters";
@@ -84,8 +85,8 @@ export function App() {
       const tableNode: TableNode = {
         id: node.id,
         fqdn: node.fqdn,
-        ipv4: node.interfaces[0].ip, // figure out how to display multiple interfaces in the table
-        mac_address: node.interfaces[0].mac,
+        ipv4: node.interfaces[0]?.ip ?? "",
+        mac_address: node.interfaces[0]?.mac ?? "",
         hostname: node.hostname,
         distinct_edges: node.distinct_edge,
         connections: node.connection_count,
@@ -107,9 +108,11 @@ export function App() {
       source: edge.source_fqdn,
       sourceIp: edge.source_ip,
       sourcePort: edge.source_port,
+      sourceProcess: edge.source_process_name ?? "",
       target: edge.target_fqdn,
       targetIp: edge.target_ip,
       targetPort: edge.target_port,
+      targetProcess: edge.target_process_name ?? "",
       protocol: edge.protocol,
       serviceName: edge.service_name,
       seenCount: edge.seen_count,
@@ -135,11 +138,11 @@ export function App() {
 
         const data = await fetchGraphSnapshot();
 
-        const snapshot: GraphSnapshot = {
+        const snapshot = normalizeGraphSnapshot({
           nodes: data.upsert_nodes,
           edges: data.upsert_edges,
           cursor: data.cursor,
-        };
+        });
 
         setSnapshot(snapshot);
       } catch (error) {
@@ -228,10 +231,10 @@ export function App() {
                 />
 
                 {tableView === "nodes" ? (
-                  <FilterBar dispatch={dispatchFilters} filters={filters} target="node" />
+                  <FilterBar dispatch={dispatchFilters} filters={filters} />
                 ) : (
                   <>
-                    <FilterBar dispatch={dispatchFilters} filters={filters} target="connection" />
+                    <FilterBar dispatch={dispatchFilters} filters={filters} />
                     {selectedNodeFqdn ? (
                       <div className="inline-flex h-7 items-center gap-2 rounded-md border bg-muted px-2 text-xs">
                         <span>Connected to {selectedNodeFqdn}</span>

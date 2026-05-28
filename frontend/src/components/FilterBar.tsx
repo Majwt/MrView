@@ -7,23 +7,19 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
   getFilterFieldDefinition,
   getFilterOperatorLabel,
-  getFilterTarget,
 } from "@/features/filters/filter-definitions";
 import type { FiltersAction } from "@/features/filters/filters-reducer";
-import type { FilterRule, FiltersState, FilterTarget } from "@/features/filters/types";
+import type { FilterRule, FiltersState } from "@/features/filters/types";
 
 type FilterBarProps = {
   dispatch: React.Dispatch<FiltersAction>;
   filters: FiltersState;
-  target: FilterTarget;
 };
 
-export default function FilterBar({ dispatch, filters, target }: FilterBarProps) {
-  const rules = filters.rules.filter((rule) => getFilterTarget(rule.field) === target);
-
+export default function FilterBar({ dispatch, filters }: FilterBarProps) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      {rules.map((filter) => (
+      {filters.rules.map((filter) => (
         <Badge key={filter.id} variant="secondary" className="h-7 gap-2 px-2">
           <span>{formatFilterRule(filter)}</span>
 
@@ -38,8 +34,8 @@ export default function FilterBar({ dispatch, filters, target }: FilterBarProps)
         </Badge>
       ))}
 
-      {rules.length > 0 ? (
-        <Button variant="ghost" size="sm" onClick={() => dispatch({ type: "clearRules", target })}>
+      {filters.rules.length > 0 ? (
+        <Button variant="ghost" size="sm" onClick={() => dispatch({ type: "clearRules" })}>
           Clear
         </Button>
       ) : null}
@@ -53,7 +49,7 @@ export default function FilterBar({ dispatch, filters, target }: FilterBarProps)
         </PopoverTrigger>
 
         <PopoverContent align="start" className="w-105 p-0">
-          <FilterBuilder dispatch={dispatch} target={target} />
+          <FilterBuilder dispatch={dispatch} />
         </PopoverContent>
       </Popover>
     </div>

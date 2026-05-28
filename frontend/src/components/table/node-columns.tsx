@@ -1,5 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 
+import { DateCell } from "./date-cell";
+
 export type TableNode = {
   id: string;
   hostname: string;
@@ -36,9 +38,11 @@ export const nodeColumns: ColumnDef<TableNode>[] = [
   {
     accessorKey: "firstSeen",
     header: "First Seen",
+    cell: ({ getValue }) => <DateCell value={getValue()} />,
   },
   {
     accessorKey: "lastSeen",
     header: "Last Seen",
+    cell: ({ getValue }) => <DateCell value={getValue()} />,
   },
 ];

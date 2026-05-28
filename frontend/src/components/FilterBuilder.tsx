@@ -1,12 +1,12 @@
 import { useState } from "react";
 
 import {
+  filterFields,
   getDefaultOperatorForField,
-  getFilterFieldsForTarget,
   getOperatorsForField,
 } from "@/features/filters/filter-definitions";
 import type { FiltersAction } from "@/features/filters/filters-reducer";
-import type { FilterField, FilterOperator, FilterTarget } from "@/features/filters/types";
+import type { FilterField, FilterOperator } from "@/features/filters/types";
 
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -14,12 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 export type Props = {
   dispatch: React.Dispatch<FiltersAction>;
-  target: FilterTarget;
 };
 
-export default function FilterBuilder({ dispatch, target }: Props) {
-  const fields = getFilterFieldsForTarget(target);
-  const initialField = fields[0].value;
+export default function FilterBuilder({ dispatch }: Props) {
+  const initialField = filterFields[0].value;
   const [field, setField] = useState<FilterField>(initialField);
   const [operator, setOperator] = useState<FilterOperator>(
     getDefaultOperatorForField(initialField),
@@ -27,7 +25,7 @@ export default function FilterBuilder({ dispatch, target }: Props) {
   const [value, setValue] = useState("");
   const [endValue, setEndValue] = useState("");
 
-  const selectedField = fields.find((option) => option.value === field) ?? fields[0];
+  const selectedField = filterFields.find((option) => option.value === field) ?? filterFields[0];
   const operators = getOperatorsForField(field);
   const needsValue = operator !== "hasAnyValue";
   const isBetween = operator === "between";
@@ -82,7 +80,7 @@ export default function FilterBuilder({ dispatch, target }: Props) {
   return (
     <div className="grid grid-cols-[140px_1fr]">
       <div className="border-r p-2">
-        {fields.map((option) => (
+        {filterFields.map((option) => (
           <button
             key={option.value}
             type="button"

@@ -4,6 +4,7 @@ import "@react-sigma/core/lib/style.css";
 
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { EdgeArrowProgram } from "sigma/rendering";
+import type { NodeHoverDrawingFunction } from "sigma/rendering";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cssVarColor, cssVarColorRgba } from "@/lib/cssVarColor";
 import type { Attributes } from "graphology-types";
@@ -32,6 +33,7 @@ function useSigmaColors() {
   const [colors, setColors] = useState({
     foreground: "",
     primary: "",
+    highlight: "",
     mutedForeground: "",
     border: "",
   });
@@ -42,6 +44,7 @@ function useSigmaColors() {
       setColors({
         foreground: cssVarColor("--foreground"),
         primary: cssVarColor("--primary"),
+        highlight: cssVarColor("--chart-4"),
         mutedForeground: cssVarColor("--muted-foreground"),
         border: cssVarColorRgba("--muted-foreground"),
       });
@@ -73,11 +76,12 @@ export default function GraphView({
     () => ({
       defaultNodeColor: colors.primary,
       defaultEdgeColor: colors.border,
+      defaultDrawNodeHover: drawPlainNodeHover,
       nodeReducer: (node: string, data: Attributes): Partial<NodeDisplayData> => ({
         ...data,
         hidden: visibleNodeIds.size > 0 && !visibleNodeIds.has(node),
-        highlighted: node === hoveredNodeId,
-        color: node === hoveredNodeId ? colors.foreground : data.color,
+        forceLabel: node === hoveredNodeId,
+        color: node === hoveredNodeId ? colors.highlight : data.color,
         size: node === hoveredNodeId ? Number(data.size ?? 10) * 1.5 : data.size,
       }),
       edgeReducer: (_edge: string, data: Attributes): Partial<EdgeDisplayData> => ({
@@ -202,6 +206,21 @@ export default function GraphView({
 
   return <div ref={containerRef} className="h-full w-full" />;
 }
+
+const drawPlainNodeHover: NodeHoverDrawingFunction = (context, data, settings) => {
+  if (!data.label) {
+    return;
+  }
+
+  const labelColor =
+    "color" in settings.labelColor
+      ? settings.labelColor.color
+      : String(data[settings.labelColor.attribute] ?? data.color);
+
+  context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`;
+  context.fillStyle = labelColor ?? data.color;
+  context.fillText(data.label, data.x + data.size + 4, data.y + settings.labelSize / 3);
+};
 
 function getEdgeHoverDisplayData(
   data: Attributes,

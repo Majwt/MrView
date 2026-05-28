@@ -16,9 +16,9 @@ import {
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "./theme-toggle";
 
-const items = [
+const graphs = [
   {
-    title: "Graph",
+    title: "Complete Graph",
     icon: Network,
     active: true,
   },
@@ -32,6 +32,7 @@ const items = [
   },
 ];
 
+
 export function AppSidebar() {
   return (
     <Sidebar>
@@ -44,10 +45,10 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>Graphs</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {graphs.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton isActive={item.active}>
                     <item.icon />

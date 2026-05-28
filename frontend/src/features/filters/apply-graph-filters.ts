@@ -1,14 +1,18 @@
 import type { GraphEdge, GraphNode, GraphSnapshot } from "../graph/types";
-import { getFilterFieldDefinition, getFilterTarget } from "./filter-definitions";
+import {
+  filterAppliesToTarget,
+  getFilterFieldDefinition,
+  getFilterTarget,
+} from "./filter-definitions";
 import type { FilterRule, FiltersState, FilterTarget } from "./types";
 
 export function applyGraphFilters(
   graph: GraphSnapshot,
   filters: FiltersState,
-  target?: FilterTarget,
+  target?: Exclude<FilterTarget, "both">,
 ): GraphSnapshot {
   const activeRules = filters.rules
-    .filter((rule) => !target || getFilterTarget(rule.field) === target)
+    .filter((rule) => !target || filterAppliesToTarget(rule.field, target))
     .filter(isUsableRule);
 
   if (activeRules.length === 0) {
@@ -55,11 +59,15 @@ export function applyGraphFilters(
 }
 
 function isNodeFilter(rule: FilterRule): boolean {
-  return getFilterTarget(rule.field) === "node";
+  const target = getFilterTarget(rule.field);
+
+  return target === "node" || target === "both";
 }
 
 function isEdgeFilter(rule: FilterRule): boolean {
-  return getFilterTarget(rule.field) === "connection";
+  const target = getFilterTarget(rule.field);
+
+  return target === "connection" || target === "both";
 }
 
 function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {
@@ -98,11 +106,20 @@ function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {
 
 function edgeMatchesRule(edge: GraphEdge, rule: FilterRule): boolean {
   switch (rule.field) {
-    case "source_ip":
-      return matches(edge.source_ip, rule);
+    case "fqdn":
+      return matches(edge.source_fqdn, rule) || matches(edge.target_fqdn, rule);
 
-    case "target_ip":
-      return matches(edge.target_ip, rule);
+    case "ip":
+      return matches(edge.source_ip, rule) || matches(edge.target_ip, rule);
+
+    case "first_seen":
+      return matches(edge.first_seen, rule);
+
+    case "last_seen":
+      return matches(edge.last_seen, rule);
+
+    case "process_name":
+      return matches(edge.source_process_name, rule) || matches(edge.target_process_name, rule);
 
     case "protocol":
       return matches(edge.protocol, rule);

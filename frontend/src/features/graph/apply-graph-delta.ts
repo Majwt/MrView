@@ -1,4 +1,5 @@
 import type { GraphDelta, GraphSnapshot } from "./types";
+import { normalizeGraphSnapshot } from "./normalize-graph-snapshot";
 
 export function applyGraphDelta(current: GraphSnapshot, delta: GraphDelta): GraphSnapshot {
   const nodesByFqdn = new Map(current.nodes.map((node) => [node.fqdn, node]));
@@ -25,9 +26,9 @@ export function applyGraphDelta(current: GraphSnapshot, delta: GraphDelta): Grap
     edgesById.delete(edgeId);
   }
 
-  return {
+  return normalizeGraphSnapshot({
     nodes: [...nodesByFqdn.values()],
     edges: [...edgesById.values()],
     cursor: delta.cursor,
-  };
+  });
 }

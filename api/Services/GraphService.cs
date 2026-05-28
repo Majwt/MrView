@@ -119,12 +119,6 @@ public class GraphService
                         ? lastSeenNode.LastSeen
                         : (lastSeenEdge != null ? lastSeenEdge.LastSeen : DateTime.UnixEpoch)
                 );
-        _logger.LogTrace(
-            "Calculated next cursor with lastSeen: {0}, maxEdgeId: {1}, maxNodeId: {2}",
-            lastSeen.ToString(Config.datetimeFormat),
-            maxEdgeId,
-            maxNodeId
-        );
         var maxLastSeen = currentCursor.LastSeen > lastSeen ? currentCursor.LastSeen : lastSeen;
         var maxMaxEdgeId = currentCursor.LastSeen == maxLastSeen ? Math.Max(currentCursor.LastSeenEdgeId, maxEdgeId) : maxEdgeId;
         var maxMaxNodeId = currentCursor.LastSeen == maxLastSeen ? Math.Max(currentCursor.LastSeenNodeId, maxNodeId) : maxNodeId;

@@ -19,6 +19,7 @@ export type GraphNode = {
   customer: Customer;
   first_seen: string;
   last_seen: string;
+  is_placeholder?: boolean;
 };
 
 export type GraphEdge = {
