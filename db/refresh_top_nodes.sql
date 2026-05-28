@@ -18,7 +18,7 @@ BEGIN
                 CustomerID = MAX(CustomerID),
                 FirstSeen = MIN(DateAdded),
                 LastSeen = MAX(DateAdded)
-            FROM test.node_info
+            FROM test.nodes
             GROUP BY Fqdn
         ),
         edge_rows AS (
@@ -67,7 +67,7 @@ BEGIN
                             AddressIPv4,
                             MacAddress,
                             Subnet
-                        FROM test.node_info ni
+                        FROM test.nodes ni
                         WHERE ni.Fqdn = n.Fqdn
                     ) x
                     ORDER BY x.AddressIPv4, x.MacAddress

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Plus, X } from "lucide-react";
 
 import FilterBuilder from "./FilterBuilder";
@@ -8,19 +9,27 @@ import {
   getFilterFieldDefinition,
   getFilterOperatorLabel,
 } from "@/features/filters/filter-definitions";
+import type { FilterSuggestions } from "@/features/filters/filter-suggestions";
 import type { FiltersAction } from "@/features/filters/filters-reducer";
 import type { FilterRule, FiltersState } from "@/features/filters/types";
 
 type FilterBarProps = {
   dispatch: React.Dispatch<FiltersAction>;
   filters: FiltersState;
+  suggestions: FilterSuggestions;
 };
 
-export default function FilterBar({ dispatch, filters }: FilterBarProps) {
+export default function FilterBar({ dispatch, filters, suggestions }: FilterBarProps) {
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       {filters.rules.map((filter) => (
-        <Badge key={filter.id} variant="secondary" className="h-7 gap-2 px-2">
+        <Badge
+          key={filter.id}
+          variant="secondary"
+          className="h-7 gap-2 border border-primary/20 bg-primary/10 px-2 text-foreground hover:bg-primary/15 dark:border-primary/35 dark:bg-primary/20 dark:text-primary-foreground dark:hover:bg-primary/25"
+        >
           <span>{formatFilterRule(filter)}</span>
 
           <button
@@ -40,16 +49,20 @@ export default function FilterBar({ dispatch, filters }: FilterBarProps) {
         </Button>
       ) : null}
 
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="default" size="sm">
             <Plus className="size-4" />
             Filter
           </Button>
         </PopoverTrigger>
 
         <PopoverContent align="start" className="w-105 p-0">
-          <FilterBuilder dispatch={dispatch} />
+          <FilterBuilder
+            dispatch={dispatch}
+            onClose={() => setOpen(false)}
+            suggestions={suggestions}
+          />
         </PopoverContent>
       </Popover>
     </div>

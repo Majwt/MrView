@@ -81,8 +81,9 @@ export default function GraphView({
         ...data,
         hidden: visibleNodeIds.size > 0 && !visibleNodeIds.has(node),
         forceLabel: node === hoveredNodeId,
-        color: node === hoveredNodeId ? colors.highlight : data.color,
+        color: node === hoveredNodeId ? colors.primary : data.color,
         size: node === hoveredNodeId ? Number(data.size ?? 10) * 1.5 : data.size,
+        highlighted: node === hoveredNodeId,
       }),
       edgeReducer: (_edge: string, data: Attributes): Partial<EdgeDisplayData> => ({
         ...data,

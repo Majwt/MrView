@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import {
   filterFields,
   getDefaultOperatorForField,
   getOperatorsForField,
 } from "@/features/filters/filter-definitions";
+import type { FilterSuggestions } from "@/features/filters/filter-suggestions";
 import type { FiltersAction } from "@/features/filters/filters-reducer";
 import type { FilterField, FilterOperator } from "@/features/filters/types";
 
@@ -14,10 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 export type Props = {
   dispatch: React.Dispatch<FiltersAction>;
+  onClose: () => void;
+  suggestions: FilterSuggestions;
 };
 
-export default function FilterBuilder({ dispatch }: Props) {
+export default function FilterBuilder({ dispatch, onClose, suggestions }: Props) {
   const initialField = filterFields[0].value;
+  const suggestionsListId = useId();
   const [field, setField] = useState<FilterField>(initialField);
   const [operator, setOperator] = useState<FilterOperator>(
     getDefaultOperatorForField(initialField),
@@ -30,6 +34,8 @@ export default function FilterBuilder({ dispatch }: Props) {
   const needsValue = operator !== "hasAnyValue";
   const isBetween = operator === "between";
   const canApply = !needsValue || (value.trim() !== "" && (!isBetween || endValue.trim() !== ""));
+  const fieldSuggestions = suggestions[field] ?? [];
+  const shouldSuggestValues = selectedField.valueType === "text" && fieldSuggestions.length > 0;
 
   function selectField(nextField: FilterField) {
     setField(nextField);
@@ -75,6 +81,7 @@ export default function FilterBuilder({ dispatch }: Props) {
 
     setValue("");
     setEndValue("");
+    onClose();
   }
 
   return (
@@ -84,7 +91,7 @@ export default function FilterBuilder({ dispatch }: Props) {
           <button
             key={option.value}
             type="button"
-            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted data-[active=true]:bg-muted"
+            className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
             data-active={field === option.value}
             onClick={() => selectField(option.value)}
           >
@@ -141,6 +148,7 @@ export default function FilterBuilder({ dispatch }: Props) {
               inputMode={selectedField.valueType === "number" ? "numeric" : undefined}
               placeholder={isBetween ? "From..." : "Value..."}
               value={value}
+              list={shouldSuggestValues ? suggestionsListId : undefined}
               onChange={(event) => setValue(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -148,6 +156,14 @@ export default function FilterBuilder({ dispatch }: Props) {
                 }
               }}
             />
+
+            {shouldSuggestValues ? (
+              <datalist id={suggestionsListId}>
+                {fieldSuggestions.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+            ) : null}
 
             {isBetween ? (
               <Input
@@ -162,6 +178,7 @@ export default function FilterBuilder({ dispatch }: Props) {
                 inputMode={selectedField.valueType === "number" ? "numeric" : undefined}
                 placeholder="To..."
                 value={endValue}
+                list={shouldSuggestValues ? suggestionsListId : undefined}
                 onChange={(event) => setEndValue(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
@@ -180,6 +197,7 @@ export default function FilterBuilder({ dispatch }: Props) {
             onClick={() => {
               setValue("");
               setEndValue("");
+              onClose();
             }}
           >
             Cancel

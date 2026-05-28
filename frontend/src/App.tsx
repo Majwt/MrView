@@ -14,6 +14,7 @@ import { normalizeGraphSnapshot } from "./features/graph/normalize-graph-snapsho
 import FilterBar from "./components/FilterBar";
 import { filtersReducer, initialFilters } from "./features/filters/filters-reducer";
 import { applyGraphFilters } from "./features/filters/apply-graph-filters";
+import { buildFilterSuggestions } from "./features/filters/filter-suggestions";
 import { X } from "lucide-react";
 
 const REFRESH_INTERVAL_MS = 1 * 60 * 1000; // 1 minutes
@@ -30,6 +31,7 @@ export function App() {
   const [connectionSearch, setConnectionSearch] = useState("");
 
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialFilters);
+  const filterSuggestions = useMemo(() => buildFilterSuggestions(snapshot), [snapshot]);
 
   const nodeFilteredSnapshot = useMemo(() => {
     if (!snapshot) return null;
@@ -231,10 +233,18 @@ export function App() {
                 />
 
                 {tableView === "nodes" ? (
-                  <FilterBar dispatch={dispatchFilters} filters={filters} />
+                  <FilterBar
+                    dispatch={dispatchFilters}
+                    filters={filters}
+                    suggestions={filterSuggestions}
+                  />
                 ) : (
                   <>
-                    <FilterBar dispatch={dispatchFilters} filters={filters} />
+                    <FilterBar
+                      dispatch={dispatchFilters}
+                      filters={filters}
+                      suggestions={filterSuggestions}
+                    />
                     {selectedNodeFqdn ? (
                       <div className="inline-flex h-7 items-center gap-2 rounded-md border bg-muted px-2 text-xs">
                         <span>Connected to {selectedNodeFqdn}</span>
@@ -254,7 +264,7 @@ export function App() {
 
               <div className="ml-auto flex shrink-0 rounded-md border p-0.5">
                 <Button
-                  variant={tableView === "nodes" ? "secondary" : "ghost"}
+                  variant={tableView === "nodes" ? "default" : "ghost"}
                   size="sm"
                   className="h-7"
                   onClick={() => setTableView("nodes")}
@@ -262,7 +272,7 @@ export function App() {
                   Nodes
                 </Button>
                 <Button
-                  variant={tableView === "connections" ? "secondary" : "ghost"}
+                  variant={tableView === "connections" ? "default" : "ghost"}
                   size="sm"
                   className="h-7"
                   onClick={() => setTableView("connections")}
