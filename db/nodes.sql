@@ -1,6 +1,6 @@
 
 
-CREATE TABLE [dbo].[node_info] (
+CREATE TABLE AxiNetStat.[test].[nodes] (
     [Id] [bigint] IDENTITY(1,1) NOT NULL,
     [CmdbCiId] [nvarchar](128) NULL,
     [Customer] [nvarchar](100) NULL,
@@ -10,6 +10,6 @@ CREATE TABLE [dbo].[node_info] (
     [Subnet] [varchar](45) NULL,
     [MacAddress] [varchar](45) NOT NULL,
     [DateAdded] [datetime2] NOT NULL
-        CONSTRAINT [DF_NODE_INFO_DateAdded] DEFAULT sysdatetime(),
-        CONSTRAINT [PK_NODE_INFO] PRIMARY KEY ([Id]),
+        CONSTRAINT [DF_NODE_DateAdded] DEFAULT sysdatetime(),
+        CONSTRAINT [PK_NODE] PRIMARY KEY ([Id]),
 );

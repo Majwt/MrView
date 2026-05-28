@@ -1,6 +1,5 @@
 
-
-CREATE TABLE [dbo].[connections] (
+CREATE TABLE axinetstat.[test].[connections] (
     [Id] [bigint] IDENTITY(1,1) NOT NULL,
 
     [HostName] [nvarchar](255) NOT NULL,
@@ -21,13 +20,13 @@ CREATE TABLE [dbo].[connections] (
 
     [State] [nvarchar](50) NULL,
     [DateAdded] [datetime2] NOT NULL
-        CONSTRAINT [DF_NetStatInfo_DateAdded] DEFAULT sysdatetime(),
+        CONSTRAINT [DF_CONNECTIONS_DateAdded] DEFAULT sysdatetime(),
 
-    CONSTRAINT [PK_NetStatInfo] PRIMARY KEY ([Id]),
+    CONSTRAINT [PK_CONNECTIONS] PRIMARY KEY ([Id]),
 
-    CONSTRAINT [CK_NetStatInfo_Direction]
+    CONSTRAINT [CK_CONNECTIONS_Direction]
         CHECK ([Direction] IN ('Unknown', 'Incoming', 'Outgoing')),
 
-    CONSTRAINT [CK_NetStatInfo_Protocol]
+    CONSTRAINT [CK_CONNECTIONS_Protocol]
         CHECK ([Protocol] IN ('TCP', 'UDP'))
 );
