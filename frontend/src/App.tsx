@@ -3,12 +3,13 @@ import { AppSidebar } from "./components/AppSidebar";
 import GraphView from "./components/GraphView";
 import { DataTable } from "@/components/table/data-table";
 import { nodeColumns, type TableNode } from "@/components/table/node-columns";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import type { GraphSnapshot } from "./features/graph/types";
 import { fetchGraphDelta, fetchGraphSnapshot } from "./api/graph-api";
 import { applyGraphDelta } from "./features/graph/apply-graph-delta";
-import { applyConnectionFiltersToSnapshot } from "./features/connections/apply-filters";
-import type { ConnectionFilter } from "./features/connections/filter-types";
+import FilterBar from "./components/FilterBar";
+import { filtersReducer, initialFilters } from "./features/filters/filters-reducer";
+import { applyGraphFilters } from "./features/filters/apply-graph-filters";
 
 const REFRESH_INTERVAL_MS = 1 * 60 * 1000; // 1 minutes
 
@@ -17,13 +18,26 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [filters, setFilters] = useState<ConnectionFilter[]>([]);
+  const [filters, dispatchFilters] = useReducer(
+    filtersReducer,
+    initialFilters,
+  );
 
   const filteredSnapshot = useMemo(() => {
     if (!snapshot) return null;
 
-    return applyConnectionFiltersToSnapshot(snapshot, filters);
+    return applyGraphFilters(snapshot, filters);
   }, [snapshot, filters]);
+
+  const visibleNodeIds = useMemo(
+    () => new Set(filteredSnapshot?.nodes.map((node) => node.fqdn) ?? []),
+    [filteredSnapshot],
+  );
+
+  const visibleEdgeIds = useMemo(
+    () => new Set(filteredSnapshot?.edges.map((edge) => edge.id) ?? []),
+    [filteredSnapshot],
+  );
 
   const tableNodes: TableNode[] = useMemo(() => {
     if (filteredSnapshot == null) return [];
@@ -32,7 +46,7 @@ export function App() {
       const tableNode: TableNode = {
         id: node.id,
         fqdn: node.fqdn,
-        ipv4: node.interfaces[0].ip,
+        ipv4: node.interfaces[0].ip, // figure out how to display multiple interfaces in the table
         mac_address: node.interfaces[0].mac,
         hostname: node.hostname,
         distinct_edges: node.distinct_edge,
@@ -116,14 +130,21 @@ export function App() {
 
         <main className="grid h-[calc(100vh-3.5rem)] grid-rows-2 overflow-hidden">
           <section className="min-h-0 border-b">
-            {filteredSnapshot ? (
-              <GraphView edges={filteredSnapshot.edges} nodes={filteredSnapshot.nodes} />
+            {snapshot ? (
+              <GraphView
+                edges={snapshot.edges}
+                nodes={snapshot.nodes}
+                visibleEdgeIds={visibleEdgeIds}
+                visibleNodeIds={visibleNodeIds}
+              />
             ) : (
               <div className="p-6 text-sm text-muted-foreground">No data to display.</div>
             )}
           </section>
 
           <section className="min-h-0 overflow-hidden p-4">
+
+            <FilterBar dispatch={dispatchFilters} filters={filters} />
             <DataTable columns={nodeColumns} data={tableNodes} />
           </section>
         </main>

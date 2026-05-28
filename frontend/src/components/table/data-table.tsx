@@ -53,7 +53,6 @@ export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData
         onChange={(event) => setGlobalFilter(event.target.value)}
         className="max-w-sm"
       />
-
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-background">

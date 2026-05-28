@@ -8,17 +8,8 @@ export function buildSigmaGraph(nodes: GraphNode[], edges: GraphEdge[]) {
     type: "directed",
   });
 
-  let counter = 0;
-  for (const node of nodes) {
-    graph.addNode(node.fqdn, {
-      label: node.fqdn,
-      network: node.interfaces,
-      customer: node.customer,
-      x: Math.sin(counter) * 1,
-      y: Math.cos(counter) * 1,
-      size: 10,
-    });
-    counter++;
+  for (const [index, node] of nodes.entries()) {
+    graph.addNode(node.fqdn, getNodeAttributes(node, index));
   }
 
   addEdges(graph, edges);
@@ -26,7 +17,83 @@ export function buildSigmaGraph(nodes: GraphNode[], edges: GraphEdge[]) {
   return graph;
 }
 
+export function syncSigmaGraph(graph: Graph, nodes: GraphNode[], edges: GraphEdge[]) {
+  const nextNodeIds = new Set(nodes.map((node) => node.fqdn));
+
+  for (const nodeId of graph.nodes()) {
+    if (!nextNodeIds.has(nodeId)) {
+      graph.dropNode(nodeId);
+    }
+  }
+
+  for (const [index, node] of nodes.entries()) {
+    if (graph.hasNode(node.fqdn)) {
+      graph.mergeNodeAttributes(node.fqdn, getNodeAttributes(node, index, false));
+    } else {
+      graph.addNode(node.fqdn, getNodeAttributes(node, index));
+    }
+  }
+
+  syncEdges(graph, edges);
+}
+
+function getNodeAttributes(node: GraphNode, index: number, includePosition = true) {
+  return {
+    label: node.fqdn,
+    network: node.interfaces,
+    customer: node.customer,
+    ...(includePosition
+      ? {
+          x: Math.sin(index) * 1,
+          y: Math.cos(index) * 1,
+        }
+      : {}),
+    size: 10,
+  };
+}
+
 export function addEdges(graph: Graph, edges: GraphEdge[]) {
+  const groupedEdgesByKey = getGroupedEdges(graph, edges);
+
+  for (const [key, groupedEdges] of groupedEdgesByKey) {
+    const first = groupedEdges[0];
+
+    graph.addDirectedEdgeWithKey(
+      key,
+      first.source_fqdn,
+      first.target_fqdn,
+      getEdgeAttributes(groupedEdges),
+    );
+  }
+
+  setupCurvedEdges(graph);
+}
+
+function syncEdges(graph: Graph, edges: GraphEdge[]) {
+  const groupedEdges = getGroupedEdges(graph, edges);
+  const nextEdgeIds = new Set(groupedEdges.keys());
+
+  for (const edgeId of graph.edges()) {
+    if (!nextEdgeIds.has(edgeId)) {
+      graph.dropEdge(edgeId);
+    }
+  }
+
+  for (const [key, group] of groupedEdges) {
+    const first = group[0];
+    const attributes = getEdgeAttributes(group);
+
+    if (graph.hasEdge(key)) {
+      graph.mergeEdgeAttributes(key, attributes);
+    } else {
+      graph.addDirectedEdgeWithKey(key, first.source_fqdn, first.target_fqdn, attributes);
+    }
+  }
+
+  setupCurvedEdges(graph);
+}
+
+function getGroupedEdges(graph: Graph, edges: GraphEdge[]) {
   const connectionCountByFqdn = new Map<string, number>();
   const groups = new Map<string, GraphEdge[]>();
 
@@ -55,40 +122,32 @@ export function addEdges(graph: Graph, edges: GraphEdge[]) {
     groups.get(key)!.push(edge);
   }
 
-  // Create grouped edges
-  for (const [key, groupedEdges] of groups) {
-    const first = groupedEdges[0];
-
-    const totalSeenCount = groupedEdges.reduce(
-      (sum, edge) => sum + Math.max(edge.seen_count ?? 1, 1),
-      0,
-    );
-
-    graph.addDirectedEdgeWithKey(key, first.source_fqdn, first.target_fqdn, {
-      label: `${totalSeenCount}`,
-      connections: groupedEdges,
-      seenCount: totalSeenCount,
-      lastSeen: first.last_seen,
-      size: getEdgeSize(totalSeenCount),
-    });
-  }
-
   // Apply node sizes
-  for (const [fqdn, count] of connectionCountByFqdn) {
+  for (const fqdn of connectionCountByFqdn.keys()) {
     if (!graph.hasNode(fqdn)) {
       continue;
     }
 
-    graph.setNodeAttribute(fqdn, "size", getNodeSize(count));
+    graph.setNodeAttribute(fqdn, "size", 10);
   }
-  setupCurvedEdges(graph);
-}
-function getEdgeSize(totalSeenCount: number): any {
-  return 5;
+
+  return groups;
 }
 
-function getNodeSize(totalSeenCount: number): any {
-  return 10;
+function getEdgeAttributes(groupedEdges: GraphEdge[]) {
+  const first = groupedEdges[0];
+  const totalSeenCount = groupedEdges.reduce(
+    (sum, edge) => sum + Math.max(edge.seen_count ?? 1, 1),
+    0,
+  );
+
+  return {
+    label: `${totalSeenCount}`,
+    connections: groupedEdges,
+    seenCount: totalSeenCount,
+    lastSeen: first.last_seen,
+    size: 5,
+  };
 }
 
 import { DEFAULT_EDGE_CURVATURE, indexParallelEdgesIndex } from "@sigma/edge-curve";

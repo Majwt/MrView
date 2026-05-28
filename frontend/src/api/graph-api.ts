@@ -1,5 +1,5 @@
 import { apiGet } from "@/api/client";
-import type { GraphCursor, GraphDelta, GraphSnapshot } from "@/features/graph/types";
+import type { GraphCursor, GraphDelta } from "@/features/graph/types";
 
 export function fetchGraphSnapshot(): Promise<GraphDelta> {
   return apiGet<GraphDelta>("/graph");

@@ -18,10 +18,6 @@ export const nodeColumns: ColumnDef<TableNode>[] = [
     header: "FQDN",
   },
   {
-    accessorKey: "hostname",
-    header: "Hostname",
-  },
-  {
     accessorKey: "ipv4",
     header: "IPv4",
   },
