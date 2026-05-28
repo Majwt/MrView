@@ -1,7 +1,12 @@
 import { useState } from "react";
 
+import {
+  getDefaultOperatorForField,
+  getFilterFieldsForTarget,
+  getOperatorsForField,
+} from "@/features/filters/filter-definitions";
 import type { FiltersAction } from "@/features/filters/filters-reducer";
-import type { FilterField, FilterOperator } from "@/features/filters/types";
+import type { FilterField, FilterOperator, FilterTarget } from "@/features/filters/types";
 
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -9,48 +14,69 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 export type Props = {
   dispatch: React.Dispatch<FiltersAction>;
+  target: FilterTarget;
 };
 
-const fields: { label: string; value: FilterField }[] = [
-  { label: "FQDN", value: "fqdn" },
-  { label: "Hostname", value: "hostname" },
-  { label: "IP", value: "ip" },
-  { label: "MAC address", value: "mac" },
-  { label: "Customer", value: "customer" },
-  { label: "Distinct edges", value: "distinct_edges" },
-  { label: "Connections", value: "connections" },
-  { label: "First seen", value: "first_seen" },
-  { label: "Last seen", value: "last_seen" },
-];
-
-const operators: { label: string; value: FilterOperator }[] = [
-  { label: "is", value: "is" },
-  { label: "is not", value: "isNot" },
-  { label: "contains", value: "contains" },
-  { label: "greater than", value: "greaterThan" },
-  { label: "less than", value: "lessThan" },
-  { label: "has any value", value: "hasAnyValue" },
-];
-
-export default function FilterBuilder({ dispatch }: Props) {
-  const [field, setField] = useState<FilterField>("fqdn");
-  const [operator, setOperator] = useState<FilterOperator>("contains");
+export default function FilterBuilder({ dispatch, target }: Props) {
+  const fields = getFilterFieldsForTarget(target);
+  const initialField = fields[0].value;
+  const [field, setField] = useState<FilterField>(initialField);
+  const [operator, setOperator] = useState<FilterOperator>(
+    getDefaultOperatorForField(initialField),
+  );
   const [value, setValue] = useState("");
+  const [endValue, setEndValue] = useState("");
 
-  const selectedField = fields.find((option) => option.value === field);
+  const selectedField = fields.find((option) => option.value === field) ?? fields[0];
+  const operators = getOperatorsForField(field);
+  const needsValue = operator !== "hasAnyValue";
+  const isBetween = operator === "between";
+  const canApply = !needsValue || (value.trim() !== "" && (!isBetween || endValue.trim() !== ""));
+
+  function selectField(nextField: FilterField) {
+    setField(nextField);
+    setOperator(getDefaultOperatorForField(nextField));
+    setValue("");
+    setEndValue("");
+  }
+
+  function coerceValue(rawValue: string) {
+    if (selectedField.valueType === "number") {
+      return Number(rawValue);
+    }
+
+    return rawValue;
+  }
+
+  function getRuleValue() {
+    if (operator === "hasAnyValue") {
+      return true;
+    }
+
+    if (operator === "between") {
+      return [coerceValue(value), coerceValue(endValue)];
+    }
+
+    return coerceValue(value);
+  }
 
   function applyFilter() {
+    if (!canApply) {
+      return;
+    }
+
     dispatch({
       type: "addRule",
       rule: {
         id: crypto.randomUUID(),
         field,
         operator,
-        value: operator === "hasAnyValue" ? true : value,
+        value: getRuleValue(),
       },
     });
 
     setValue("");
+    setEndValue("");
   }
 
   return (
@@ -62,7 +88,7 @@ export default function FilterBuilder({ dispatch }: Props) {
             type="button"
             className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted data-[active=true]:bg-muted"
             data-active={field === option.value}
-            onClick={() => setField(option.value)}
+            onClick={() => selectField(option.value)}
           >
             {option.label}
           </button>
@@ -72,7 +98,10 @@ export default function FilterBuilder({ dispatch }: Props) {
       <div className="space-y-3 p-3">
         <div className="text-sm font-medium">{selectedField?.label}</div>
 
-        <Select value={operator} onValueChange={(nextOperator) => setOperator(nextOperator as FilterOperator)}>
+        <Select
+          value={operator}
+          onValueChange={(nextOperator) => setOperator(nextOperator as FilterOperator)}
+        >
           <SelectTrigger>
             <SelectValue placeholder="Operator" />
           </SelectTrigger>
@@ -86,24 +115,79 @@ export default function FilterBuilder({ dispatch }: Props) {
           </SelectContent>
         </Select>
 
-        <Input
-          disabled={operator === "hasAnyValue"}
-          placeholder="Value..."
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              applyFilter();
-            }
-          }}
-        />
+        {selectedField.valueType === "select" ? (
+          <Select disabled={!needsValue} value={value} onValueChange={setValue}>
+            <SelectTrigger>
+              <SelectValue placeholder="Value..." />
+            </SelectTrigger>
+
+            <SelectContent>
+              {selectedField.options?.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className={isBetween ? "grid grid-cols-2 gap-2" : undefined}>
+            <Input
+              disabled={!needsValue}
+              type={
+                selectedField.valueType === "number"
+                  ? "number"
+                  : selectedField.valueType === "date"
+                    ? "date"
+                    : "text"
+              }
+              inputMode={selectedField.valueType === "number" ? "numeric" : undefined}
+              placeholder={isBetween ? "From..." : "Value..."}
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  applyFilter();
+                }
+              }}
+            />
+
+            {isBetween ? (
+              <Input
+                disabled={!needsValue}
+                type={
+                  selectedField.valueType === "number"
+                    ? "number"
+                    : selectedField.valueType === "date"
+                      ? "date"
+                      : "text"
+                }
+                inputMode={selectedField.valueType === "number" ? "numeric" : undefined}
+                placeholder="To..."
+                value={endValue}
+                onChange={(event) => setEndValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    applyFilter();
+                  }
+                }}
+              />
+            ) : null}
+          </div>
+        )}
 
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setValue("")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setValue("");
+              setEndValue("");
+            }}
+          >
             Cancel
           </Button>
 
-          <Button size="sm" onClick={applyFilter}>
+          <Button size="sm" disabled={!canApply} onClick={applyFilter}>
             Apply filter
           </Button>
         </div>

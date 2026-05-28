@@ -11,7 +11,6 @@ import {
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -24,11 +23,28 @@ import {
 type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  globalFilter?: string;
+  onGlobalFilterChange?: (value: string) => void;
+  getRowHoverId?: (row: TData) => string | null;
+  hoveredRowId?: string | null;
+  hoveredRowIds?: Set<string>;
+  onRowHoverChange?: (rowId: string | null) => void;
 };
 
-export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData, TValue>) {
+export function DataTable<TData, TValue>({
+  columns,
+  data,
+  globalFilter: controlledGlobalFilter,
+  onGlobalFilterChange: setControlledGlobalFilter,
+  getRowHoverId,
+  hoveredRowId,
+  hoveredRowIds,
+  onRowHoverChange,
+}: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [uncontrolledGlobalFilter, setUncontrolledGlobalFilter] = useState("");
+  const globalFilter = controlledGlobalFilter ?? uncontrolledGlobalFilter;
+  const setGlobalFilter = setControlledGlobalFilter ?? setUncontrolledGlobalFilter;
 
   const table = useReactTable({
     data,
@@ -47,12 +63,6 @@ export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <Input
-        placeholder="Search connections..."
-        value={globalFilter}
-        onChange={(event) => setGlobalFilter(event.target.value)}
-        className="max-w-sm"
-      />
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-background">
@@ -80,15 +90,27 @@ export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData
 
           <TableBody>
             {table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map((row) => {
+                const rowHoverId = getRowHoverId?.(row.original) ?? null;
+                const isHovered =
+                  !!rowHoverId &&
+                  (rowHoverId === hoveredRowId || (hoveredRowIds?.has(rowHoverId) ?? false));
+
+                return (
+                  <TableRow
+                    key={row.id}
+                    data-state={isHovered ? "selected" : undefined}
+                    onMouseEnter={() => onRowHoverChange?.(rowHoverId)}
+                    onMouseLeave={() => onRowHoverChange?.(null)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">

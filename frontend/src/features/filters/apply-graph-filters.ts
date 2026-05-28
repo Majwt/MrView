@@ -1,11 +1,15 @@
 import type { GraphEdge, GraphNode, GraphSnapshot } from "../graph/types";
-import type { FilterRule, FiltersState } from "./types";
+import { getFilterFieldDefinition, getFilterTarget } from "./filter-definitions";
+import type { FilterRule, FiltersState, FilterTarget } from "./types";
 
 export function applyGraphFilters(
   graph: GraphSnapshot,
   filters: FiltersState,
+  target?: FilterTarget,
 ): GraphSnapshot {
-  const activeRules = filters.rules.filter(isUsableRule);
+  const activeRules = filters.rules
+    .filter((rule) => !target || getFilterTarget(rule.field) === target)
+    .filter(isUsableRule);
 
   if (activeRules.length === 0) {
     return graph;
@@ -26,11 +30,10 @@ export function applyGraphFilters(
     }
   }
 
-  const visibleNodeIds = new Set(nodes.map((node) => node.id));
+  const visibleNodeIds = new Set(nodes.map((node) => node.fqdn));
 
   edges = edges.filter(
-    (edge) =>
-      visibleNodeIds.has(edge.source_fqdn) && visibleNodeIds.has(edge.target_fqdn),
+    (edge) => visibleNodeIds.has(edge.source_fqdn) && visibleNodeIds.has(edge.target_fqdn),
   );
 
   if (hasEdgeRules && !hasNodeRules) {
@@ -52,29 +55,11 @@ export function applyGraphFilters(
 }
 
 function isNodeFilter(rule: FilterRule): boolean {
-  return [
-    "fqdn",
-    "hostname",
-    "ip",
-    "mac",
-    "customer",
-    "distinct_edges",
-    "connections",
-    "first_seen",
-    "last_seen",
-  ].includes(rule.field);
+  return getFilterTarget(rule.field) === "node";
 }
 
 function isEdgeFilter(rule: FilterRule): boolean {
-  return [
-    "source_ip",
-    "target_ip",
-    "protocol",
-    "service_port",
-    "service_name",
-    "seen_count",
-    "last_seen",
-  ].includes(rule.field);
+  return getFilterTarget(rule.field) === "connection";
 }
 
 function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {
@@ -131,8 +116,11 @@ function edgeMatchesRule(edge: GraphEdge, rule: FilterRule): boolean {
     case "seen_count":
       return matches(edge.seen_count, rule);
 
-    case "last_seen":
+    case "edge_last_seen":
       return matches(edge.last_seen, rule);
+
+    case "edge_first_seen":
+      return matches(edge.first_seen, rule);
 
     default:
       return true;
@@ -151,17 +139,31 @@ function isUsableRule(rule: FilterRule): boolean {
   return rule.value !== null && rule.value !== undefined && String(rule.value).trim() !== "";
 }
 
-function matches(
-  actualValue: string | number | null | undefined,
-  rule: FilterRule,
-): boolean {
+function matches(actualValue: string | number | null | undefined, rule: FilterRule): boolean {
   const filterValue = rule.value;
+  const valueType = getFilterFieldDefinition(rule.field).valueType;
 
   switch (rule.operator) {
     case "is":
+      if (valueType === "date") {
+        return toDateInputValue(actualValue) === String(filterValue);
+      }
+
+      if (valueType === "number") {
+        return Number(actualValue) === Number(filterValue);
+      }
+
       return String(actualValue) === String(filterValue);
 
     case "isNot":
+      if (valueType === "date") {
+        return toDateInputValue(actualValue) !== String(filterValue);
+      }
+
+      if (valueType === "number") {
+        return Number(actualValue) !== Number(filterValue);
+      }
+
       return String(actualValue) !== String(filterValue);
 
     case "contains":
@@ -170,10 +172,10 @@ function matches(
         .includes(String(filterValue ?? "").toLowerCase());
 
     case "greaterThan":
-      return Number(actualValue) > Number(filterValue);
+      return toComparableValue(actualValue, valueType) > toComparableValue(filterValue, valueType);
 
     case "lessThan":
-      return Number(actualValue) < Number(filterValue);
+      return toComparableValue(actualValue, valueType) < toComparableValue(filterValue, valueType);
 
     case "between": {
       if (!Array.isArray(filterValue)) {
@@ -181,18 +183,36 @@ function matches(
       }
 
       const [min, max] = filterValue;
+      const comparableValue = toComparableValue(actualValue, valueType);
 
-      return Number(actualValue) >= Number(min) && Number(actualValue) <= Number(max);
+      return (
+        comparableValue >= toComparableValue(min, valueType) &&
+        comparableValue <= toComparableValue(max, valueType)
+      );
     }
 
     case "hasAnyValue":
-      return (
-        actualValue !== null &&
-        actualValue !== undefined &&
-        actualValue !== ""
-      );
+      return actualValue !== null && actualValue !== undefined && actualValue !== "";
 
     default:
       return true;
   }
+}
+
+function toComparableValue(value: unknown, valueType: string) {
+  if (valueType === "date") {
+    return Date.parse(String(value));
+  }
+
+  return Number(value);
+}
+
+function toDateInputValue(value: unknown) {
+  const timestamp = Date.parse(String(value));
+
+  if (Number.isNaN(timestamp)) {
+    return "";
+  }
+
+  return new Date(timestamp).toISOString().slice(0, 10);
 }

@@ -13,7 +13,9 @@ export type FilterField =
   | "service_port"
   | "seen_count"
   | "source_ip"
-  | "target_ip";
+  | "target_ip"
+  | "edge_first_seen"
+  | "edge_last_seen";
 
 export type FilterOperator =
   | "is"
@@ -23,6 +25,9 @@ export type FilterOperator =
   | "lessThan"
   | "between"
   | "hasAnyValue";
+
+export type FilterValueType = "text" | "number" | "date" | "select";
+export type FilterTarget = "node" | "connection";
 
 export type FilterRule = {
   id: string;

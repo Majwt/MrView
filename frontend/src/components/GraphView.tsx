@@ -20,6 +20,11 @@ type GraphViewProps = {
   edges: GraphEdge[];
   visibleNodeIds: Set<string>;
   visibleEdgeIds: Set<string>;
+  hoveredNodeId?: string | null;
+  hoveredEdgeIds?: Set<string>;
+  onEdgeHoverChange?: (edgeIds: string[]) => void;
+  onNodeHoverChange?: (fqdn: string | null) => void;
+  onNodeSelect?: (fqdn: string) => void;
 };
 
 function useSigmaColors() {
@@ -46,7 +51,17 @@ function useSigmaColors() {
   return colors;
 }
 
-export default function GraphView({ nodes, edges, visibleEdgeIds, visibleNodeIds }: GraphViewProps) {
+export default function GraphView({
+  nodes,
+  edges,
+  visibleEdgeIds,
+  visibleNodeIds,
+  hoveredNodeId,
+  hoveredEdgeIds,
+  onEdgeHoverChange,
+  onNodeHoverChange,
+  onNodeSelect,
+}: GraphViewProps) {
   const graphRef = useRef(buildSigmaGraph(nodes, edges));
   const rendererRef = useRef<Sigma<Attributes, Attributes, Attributes> | null>(null);
 
@@ -61,9 +76,13 @@ export default function GraphView({ nodes, edges, visibleEdgeIds, visibleNodeIds
       nodeReducer: (node: string, data: Attributes): Partial<NodeDisplayData> => ({
         ...data,
         hidden: visibleNodeIds.size > 0 && !visibleNodeIds.has(node),
+        highlighted: node === hoveredNodeId,
+        color: node === hoveredNodeId ? colors.foreground : data.color,
+        size: node === hoveredNodeId ? Number(data.size ?? 10) * 1.5 : data.size,
       }),
       edgeReducer: (_edge: string, data: Attributes): Partial<EdgeDisplayData> => ({
         ...data,
+        ...getEdgeHoverDisplayData(data, hoveredEdgeIds, colors.foreground),
         hidden:
           visibleEdgeIds.size > 0 &&
           !((data.connections as GraphEdge[] | undefined) ?? []).some((connection) =>
@@ -79,13 +98,28 @@ export default function GraphView({ nodes, edges, visibleEdgeIds, visibleNodeIds
         color: colors.foreground,
       },
     }),
-    [colors, visibleEdgeIds, visibleNodeIds],
+    [colors, hoveredEdgeIds, hoveredNodeId, visibleEdgeIds, visibleNodeIds],
   );
   const settingsRef = useRef(settings);
+  const onEdgeHoverChangeRef = useRef(onEdgeHoverChange);
+  const onNodeHoverChangeRef = useRef(onNodeHoverChange);
+  const onNodeSelectRef = useRef(onNodeSelect);
 
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+
+  useEffect(() => {
+    onEdgeHoverChangeRef.current = onEdgeHoverChange;
+  }, [onEdgeHoverChange]);
+
+  useEffect(() => {
+    onNodeHoverChangeRef.current = onNodeHoverChange;
+  }, [onNodeHoverChange]);
+
+  useEffect(() => {
+    onNodeSelectRef.current = onNodeSelect;
+  }, [onNodeSelect]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -113,8 +147,37 @@ export default function GraphView({ nodes, edges, visibleEdgeIds, visibleNodeIds
     rendererRef.current = renderer;
 
     const cleanupLayout = forceSupervisorLayout(renderer, graph);
+    const handleClickNode = ({ node }: { node: string }) => {
+      onNodeSelectRef.current?.(node);
+    };
+    const handleEnterNode = ({ node }: { node: string }) => {
+      onNodeHoverChangeRef.current?.(node);
+    };
+    const handleLeaveNode = () => {
+      onNodeHoverChangeRef.current?.(null);
+    };
+    const handleEnterEdge = ({ edge }: { edge: string }) => {
+      const connections =
+        (graph.getEdgeAttribute(edge, "connections") as GraphEdge[] | undefined) ?? [];
+
+      onEdgeHoverChangeRef.current?.(connections.map((connection) => connection.id));
+    };
+    const handleLeaveEdge = () => {
+      onEdgeHoverChangeRef.current?.([]);
+    };
+
+    renderer.on("clickNode", handleClickNode);
+    renderer.on("enterEdge", handleEnterEdge);
+    renderer.on("enterNode", handleEnterNode);
+    renderer.on("leaveEdge", handleLeaveEdge);
+    renderer.on("leaveNode", handleLeaveNode);
 
     return () => {
+      renderer.removeListener("clickNode", handleClickNode);
+      renderer.removeListener("enterEdge", handleEnterEdge);
+      renderer.removeListener("enterNode", handleEnterNode);
+      renderer.removeListener("leaveEdge", handleLeaveEdge);
+      renderer.removeListener("leaveNode", handleLeaveNode);
       cleanupLayout();
       renderer.kill();
       rendererRef.current = null;
@@ -138,4 +201,27 @@ export default function GraphView({ nodes, edges, visibleEdgeIds, visibleNodeIds
   }, [settings]);
 
   return <div ref={containerRef} className="h-full w-full" />;
+}
+
+function getEdgeHoverDisplayData(
+  data: Attributes,
+  hoveredEdgeIds: Set<string> | undefined,
+  hoverColor: string,
+) {
+  const isHovered =
+    hoveredEdgeIds &&
+    hoveredEdgeIds.size > 0 &&
+    ((data.connections as GraphEdge[] | undefined) ?? []).some((connection) =>
+      hoveredEdgeIds.has(connection.id),
+    );
+
+  if (!isHovered) {
+    return {};
+  }
+
+  return {
+    color: hoverColor,
+    highlighted: true,
+    size: Number(data.size ?? 1) * 1.8,
+  };
 }
