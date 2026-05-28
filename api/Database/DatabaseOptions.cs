@@ -9,14 +9,19 @@ public sealed class DatabaseOptions
     public required int SeenCountThreshold { get; init; }
 
     private static readonly Regex TableRegex = new(
-        @"^(?:\[([A-Za-z0-9]+)\]|([A-Za-z0-9]+))\.(?:\[([A-Za-z0-9]+)\]|([A-Za-z0-9]+))$",
+        @"^(?:\[([A-Za-z0-9_]+)\]|([A-Za-z0-9_]+))\.(?:\[([A-Za-z0-9_]+)\]|([A-Za-z0-9_]+))$",
         RegexOptions.Compiled
     );
 
     public bool IsValid()
     {
-        return TableIdentifier.TryParse(EdgeTable, out _)
-            && TableIdentifier.TryParse(NodeTable, out _)
-            && SeenCountThreshold >= 0;
+        bool EdgeTableValid = TableRegex.IsMatch(EdgeTable);
+        Console.WriteLine($"EdgeTable: {EdgeTable}, Valid: {EdgeTableValid}");
+        bool NodeTableValid = TableRegex.IsMatch(NodeTable);
+        Console.WriteLine($"NodeTable: {NodeTable}, Valid: {NodeTableValid}");
+        bool SeenCountThresholdValid = SeenCountThreshold >= 0;
+        Console.WriteLine($"SeenCountThreshold: {SeenCountThreshold}, Valid: {SeenCountThresholdValid}");
+
+        return EdgeTableValid && NodeTableValid && SeenCountThresholdValid;
     }
 }

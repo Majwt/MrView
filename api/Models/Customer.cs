@@ -1,3 +1,3 @@
 namespace Api.Models;
 
-public sealed record Customer(string Name, string CmdbCiId, int Id);
+public sealed record Customer(string Name, string CmdbCiId, long Id);

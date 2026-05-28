@@ -1,8 +1,7 @@
-
 namespace Api.Models;
 
 
-public sealed record NodeDto(
+public sealed record NodeEntity(
     long Id,
     string Fqdn,
     string Hostname,
@@ -13,4 +12,3 @@ public sealed record NodeDto(
     DateTime FirstSeen,
     DateTime LastSeen
 );
-

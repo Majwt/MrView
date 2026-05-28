@@ -1,20 +1,21 @@
 namespace Api.Models;
 
 public sealed record EdgeDto(
-    string Id,
+    string Id, // stable id based on properties of the edge, not the database id
     string Protocol,
     string ServiceName,
     string SourceIp,
-    int? SourcePort,
+    long? SourcePort,
     string SourceFqdn,
-    int? SourcePid,
+    long? SourcePid,
     string? SourceProcessName,
     string TargetIp,
-    int? TargetPort,
+    long? TargetPort,
     string TargetFqdn,
-    int? TargetPid,
+    long? TargetPid,
     string? TargetProcessName,
     long SeenCount,
     DateTime LastSeen,
     DateTime FirstSeen
 );
+

@@ -17,7 +17,7 @@ public class Db
     {
         _logger = logger;
         ConnectionString =
-            configuration.GetConnectionString("DefaultConnection")
+            configuration.GetConnectionString(Config.CONNECTION_STRING_NAME)
             ?? throw new InvalidOperationException("Missing connection string.");
 
         var dbOptions = options.Value;
@@ -36,9 +36,15 @@ public class Db
     private const string _edgesColumns =
         @"
         id,
+        endpoint_a,
+        endpoint_b,
         protocol,
+
+        service_fqdn,
         service_port,
         service_name,
+
+        known_process_name,
 
         seen_count,
 
@@ -55,10 +61,12 @@ public class Db
         target_pid,
 
         first_seen,
-        last_seen
+        last_seen,
+
+        edge_key
           ";
 
-    public async Task<IEnumerable<EdgeDto>> getEdgesAsync(GraphCursor cursor)
+    public async Task<IEnumerable<EdgeEntity>> getEdgesAsync(GraphCursor cursor)
     {
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
@@ -66,57 +74,200 @@ public class Db
         var sql = $"""
             SELECT
               {_edgesColumns}
-            FROM {_nodesTable.Schema}.{_nodesTable.Table}
-              WHERE last_seen > @LastSeen
-                 OR id > @LastId
-              ORDER BY last_seen, id;
+            FROM {_edgesTable}
+            WHERE seen_count > @SeenCountThreshold
+                AND (
+                    last_seen > @LastSeen
+                    OR (
+                        last_seen = @LastSeen
+                        AND id > @LastId
+                        )
+                    )
             """;
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen);
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
+        command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
         await using var reader = await command.ExecuteReaderAsync();
-
-        return await ParseEdgesFromReader(reader);
+        try
+        {
+            var edges = await ParseEdgesFromReader(reader);
+            return edges;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error parsing edges from database.");
+            return [];
+        }
     }
 
-    private static async Task<IEnumerable<EdgeDto>> ParseEdgesFromReader(SqlDataReader reader)
+    public async Task<IEnumerable<EdgeEntity>>  getCustomerEdges(GraphCursor cursor, int customerId)
     {
-        var edges = new List<EdgeDto>();
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        var sql = $"""
+            SELECT
+              {_edgesColumns}
+            FROM {_edgesTable}
+            WHERE seen_count > @SeenCountThreshold
+                AND CustomerID = @CustomerId
+                AND (
+                    last_seen > @LastSeen
+                    OR (
+                        last_seen = @LastSeen
+                        AND id > @LastId
+                        )
+                    )
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen);
+        command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
+        command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
+        command.Parameters.AddWithValue("@CustomerId", customerId);
+        await using var reader = await command.ExecuteReaderAsync();
+        try
+        {
+            var edges = await ParseEdgesFromReader(reader);
+            return edges;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error parsing edges from database.");
+            return [];
+        }
+    }
+
+    private async Task<IEnumerable<EdgeEntity>> ParseEdgesFromReader(SqlDataReader reader)
+    {
+        var edges = new List<EdgeEntity>();
+        var idOrdinal = reader.GetOrdinal("id");
+
+        var endpointAOrdinal = reader.GetOrdinal("endpoint_a");
+        var endpointBOrdinal = reader.GetOrdinal("endpoint_b");
+
+        var protocolOrdinal = reader.GetOrdinal("protocol");
+
+        var serviceFqdnOrdinal = reader.GetOrdinal("service_fqdn");
+        var servicePortOrdinal = reader.GetOrdinal("service_port");
+        var serviceNameOrdinal = reader.GetOrdinal("service_name");
+
+        var knownProcessNameOrdinal = reader.GetOrdinal("known_process_name");
+
+        var seenCountOrdinal = reader.GetOrdinal("seen_count");
+
+        var sourceIpOrdinal = reader.GetOrdinal("source_ip");
+        var sourcePortOrdinal = reader.GetOrdinal("source_port");
+        var sourceFqdnOrdinal = reader.GetOrdinal("source_fqdn");
+        var sourcePidOrdinal = reader.GetOrdinal("source_pid");
+        var sourceProcessNameOrdinal = reader.GetOrdinal("source_process_name");
+
+        var targetIpOrdinal = reader.GetOrdinal("target_ip");
+        var targetPortOrdinal = reader.GetOrdinal("target_port");
+        var targetFqdnOrdinal = reader.GetOrdinal("target_fqdn");
+        var targetPidOrdinal = reader.GetOrdinal("target_pid");
+        var targetProcessNameOrdinal = reader.GetOrdinal("target_process_name");
+
+        var lastSeenOrdinal = reader.GetOrdinal("last_seen");
+        var firstSeenOrdinal = reader.GetOrdinal("first_seen");
+
+        var edgeKeyOrdinal = reader.GetOrdinal("edge_key");
+        var count = 0;
+
         while (await reader.ReadAsync())
         {
-            var edge = new EdgeDto(
-                Id: reader.GetString(reader.GetOrdinal("id")),
-                Protocol: reader.GetString(reader.GetOrdinal("protocol")),
-                ServiceName: reader.GetString(reader.GetOrdinal("service_name")),
-                SourceIp: reader.GetString(reader.GetOrdinal("source_ip")),
-                SourcePort: reader.IsDBNull(reader.GetOrdinal("source_port"))
-                    ? null
-                    : reader.GetInt32(reader.GetOrdinal("source_port")),
-                SourceFqdn: reader.GetString(reader.GetOrdinal("source_fqdn")),
-                SourcePid: reader.IsDBNull(reader.GetOrdinal("source_pid"))
-                    ? null
-                    : (int?)reader.GetInt32(reader.GetOrdinal("source_pid")),
-                SourceProcessName: reader.IsDBNull(reader.GetOrdinal("source_process_name"))
-                    ? null
-                    : reader.GetString(reader.GetOrdinal("source_process_name")),
-                TargetIp: reader.GetString(reader.GetOrdinal("target_ip")),
-                TargetPort: reader.IsDBNull(reader.GetOrdinal("target_port"))
-                    ? null
-                    : reader.GetInt32(reader.GetOrdinal("target_port")),
-                TargetFqdn: reader.GetString(reader.GetOrdinal("target_fqdn")),
-                TargetPid: reader.IsDBNull(reader.GetOrdinal("target_pid"))
-                    ? null
-                    : (int?)reader.GetInt32(reader.GetOrdinal("target_pid")),
-                TargetProcessName: reader.IsDBNull(reader.GetOrdinal("target_process_name"))
-                    ? null
-                    : reader.GetString(reader.GetOrdinal("target_process_name")),
-                SeenCount: reader.GetInt64(reader.GetOrdinal("seen_count")),
-                LastSeen: reader.GetDateTime(reader.GetOrdinal("last_seen")),
-                FirstSeen: reader.GetDateTime(reader.GetOrdinal("first_seen"))
+            count++;
+
+            _logger.LogInformation(
+                "Edge row found. Id={Id}, LastSeen={LastSeen}, SeenCount={SeenCount}",
+                reader.GetInt64(reader.GetOrdinal("id")),
+                reader.GetDateTime(reader.GetOrdinal("last_seen")),
+                reader.GetInt64(reader.GetOrdinal("seen_count"))
+            );
+            var id = reader.GetInt64(idOrdinal);
+
+            var endpointA = reader.GetString(endpointAOrdinal);
+            var endpointB = reader.GetString(endpointBOrdinal);
+
+            var protocol = reader.GetString(protocolOrdinal);
+
+
+            var serviceFqdn = reader.GetString(serviceFqdnOrdinal);
+            var serviceName = reader.GetString(serviceNameOrdinal);
+            var servicePort = reader.IsDBNull(servicePortOrdinal)
+                ? null
+                : (int?)reader.GetInt32(servicePortOrdinal);
+
+            var knownProcessName = reader.IsDBNull(knownProcessNameOrdinal)
+                ? ""
+                : reader.GetString(knownProcessNameOrdinal);
+
+            var sourceIp = reader.GetString(sourceIpOrdinal);
+            var sourcePort = reader.IsDBNull(sourcePortOrdinal)
+                ? null
+                : (int?)reader.GetInt32(sourcePortOrdinal);
+
+            var sourceFqdn = reader.GetString(sourceFqdnOrdinal);
+
+            var sourcePid = reader.IsDBNull(sourcePidOrdinal)
+                ? null
+                : (int?)reader.GetInt32(sourcePidOrdinal);
+
+            var sourceProcessName = reader.IsDBNull(sourceProcessNameOrdinal)
+                ? null
+                : reader.GetString(sourceProcessNameOrdinal);
+
+            var targetIp = reader.GetString(targetIpOrdinal);
+
+            var targetPort = reader.IsDBNull(targetPortOrdinal)
+                ? null
+                : (int?)reader.GetInt32(targetPortOrdinal);
+
+            var targetFqdn = reader.GetString(targetFqdnOrdinal);
+
+            var targetPid = reader.IsDBNull(targetPidOrdinal)
+                ? null
+                : (int?)reader.GetInt32(targetPidOrdinal);
+
+            var targetProcessName = reader.IsDBNull(targetProcessNameOrdinal)
+                ? null
+                : reader.GetString(targetProcessNameOrdinal);
+
+            var seenCount = reader.GetInt64(seenCountOrdinal);
+            var lastSeen = reader.GetDateTime(lastSeenOrdinal);
+            var firstSeen = reader.GetDateTime(firstSeenOrdinal);
+
+            var edgeKey = reader.GetString(edgeKeyOrdinal);
+
+            var edge = new EdgeEntity(
+                Id: id,
+                EndpointA: endpointA,
+                EndpointB: endpointB,
+                Protocol: protocol,
+                ServiceFqdn: serviceFqdn,
+                ServicePort: servicePort,
+                ServiceName: serviceName,
+                KnownProcessName: knownProcessName,
+                SeenCount: seenCount,
+                SourceIp: sourceIp,
+                SourcePort: sourcePort,
+                SourceFqdn: sourceFqdn,
+                SourcePid: sourcePid,
+                SourceProcessName: sourceProcessName,
+                TargetIp: targetIp,
+                TargetPort: targetPort,
+                TargetFqdn: targetFqdn,
+                TargetPid: targetPid,
+                TargetProcessName: targetProcessName,
+                LastSeen: lastSeen,
+                FirstSeen: firstSeen,
+                EdgeKey: edgeKey
             );
             edges.Add(edge);
         }
+        _logger.LogInformation("Total edges parsed: {Count}", count);
         return edges;
     }
 
@@ -129,13 +280,13 @@ public class Db
         CmdbCiId,
         Customer,
         CustomerID,
-        UniqueEdges,
+        DistinctEdges,
         ConnectionCount,
         FirstSeen,
         LastSeen
           ";
 
-    public async Task<IEnumerable<NodeDto>> getNodesAsync(GraphCursor cursor)
+    public async Task<IEnumerable<NodeEntity>> getNodesAsync(GraphCursor cursor)
     {
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
@@ -143,7 +294,7 @@ public class Db
         var sql = $"""
                 SELECT
                 {_nodesColumns}
-                FROM {_edgesTable.Schema}.{_edgesTable.Table}
+                FROM {_nodesTable}
                 WHERE
                     LastSeen > @LastSeen
                     OR (
@@ -161,92 +312,110 @@ public class Db
         return await ParseNodesFromReader(reader);
     }
 
-    private static async Task<IEnumerable<NodeDto>> ParseNodesFromReader(SqlDataReader reader)
+    public async Task<IEnumerable<NodeEntity>> getCustomerNodesAsync(
+        GraphCursor cursor,
+        int customerId
+    )
     {
-        var nodes = new List<NodeDto>();
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        var sql = $"""
+                SELECT
+                {_nodesColumns}
+                FROM {_nodesTable}
+                WHERE
+                    CustomerID = @CustomerId
+                    AND (
+                    LastSeen > @LastSeen
+                    OR (
+                        LastSeen = @LastSeen
+                        AND Id > @LastId
+                    )
+                    )
+                ORDER BY LastSeen, Id;
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@CustomerId", customerId);
+        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen);
+        command.Parameters.AddWithValue("@LastId", cursor.LastSeenNodeId);
+        await using var reader = await command.ExecuteReaderAsync();
+
+        try
+        {
+            return await ParseNodesFromReader(reader);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error parsing nodes from database.");
+            return [];
+        }
+    }
+
+    private async Task<IEnumerable<NodeEntity>> ParseNodesFromReader(SqlDataReader reader)
+    {
+        var nodes = new List<NodeEntity>();
+        var idOrdinal = reader.GetOrdinal("Id");
+        var fqdnOrdinal = reader.GetOrdinal("Fqdn");
+        var hostnameOrdinal = reader.GetOrdinal("Hostname");
+
+        var interfacesJsonOrdinal = reader.GetOrdinal("InterfacesJson");
+
+        var distinctEdgesOrdinal = reader.GetOrdinal("DistinctEdges");
+        var connectionCountOrdinal = reader.GetOrdinal("ConnectionCount");
+
+        var customerOrdinal = reader.GetOrdinal("Customer");
+        var cmdbCiIdOrdinal = reader.GetOrdinal("CmdbCiId");
+        var customerIdOrdinal = reader.GetOrdinal("CustomerID");
+
+        var firstSeenOrdinal = reader.GetOrdinal("FirstSeen");
+        var lastSeenOrdinal = reader.GetOrdinal("LastSeen");
+
         while (await reader.ReadAsync())
         {
-            var interfacesJson = reader.GetString(reader.GetOrdinal("InterfacesJson"));
-            var interfaces = System.Text.Json.JsonSerializer.Deserialize<List<Interface>>(
+            var id = reader.GetInt64(idOrdinal);
+
+            var fqdn = reader.GetString(fqdnOrdinal);
+            var hostname = reader.GetString(hostnameOrdinal);
+
+            var interfacesJson = reader.GetString(interfacesJsonOrdinal);
+
+            var interfaces = System.Text.Json.JsonSerializer.Deserialize<List<NetInterface>>(
                 interfacesJson
             );
+
             if (interfaces == null || interfaces.Count == 0)
             {
                 continue;
             }
-            var node = new NodeDto(
-                Fqdn: reader.GetString(reader.GetOrdinal("Fqdn")),
-                Ip: reader.GetString(reader.GetOrdinal("Hostname")),
+
+            var distinctEdges = reader.GetInt64(distinctEdgesOrdinal);
+            var connectionCount = reader.GetInt64(connectionCountOrdinal);
+
+            var customerName = reader.GetString(customerOrdinal);
+            var cmdbCiId = reader.GetString(cmdbCiIdOrdinal);
+            var customerId = reader.GetInt32(customerIdOrdinal);
+
+            var firstSeen = reader.GetDateTime(firstSeenOrdinal);
+            var lastSeen = reader.GetDateTime(lastSeenOrdinal);
+
+            var customer = new Customer(Name: customerName, CmdbCiId: cmdbCiId, Id: customerId);
+
+            var node = new NodeEntity(
+                Id: id,
+                Fqdn: fqdn,
+                Hostname: hostname,
                 Interfaces: interfaces,
-                DistinctEdge: reader.GetInt32(reader.GetOrdinal("DistinctEdges")),
-                ConnectionCount: reader.GetInt32(reader.GetOrdinal("ConnectionCount")),
-                Customer: new Customer(
-                    Name: reader.GetString(reader.GetOrdinal("Customer")),
-                    CmdbCiId: reader.GetString(reader.GetOrdinal("CmdbCiId")),
-                    Id: reader.GetInt32(reader.GetOrdinal("CustomerID"))
-                ),
-                FirstSeen: reader.GetDateTime(reader.GetOrdinal("FirstSeen")),
-                LastSeen: reader.GetDateTime(reader.GetOrdinal("LastSeen"))
+                DistinctEdge: distinctEdges,
+                ConnectionCount: connectionCount,
+                Customer: customer,
+                FirstSeen: firstSeen,
+                LastSeen: lastSeen
             );
+
             nodes.Add(node);
         }
         return nodes;
-    }
-
-    public void getCustomerGraphSnapshot(int customerId)
-    {
-        // Similar to getGraphSnapshot but with a WHERE clause for the specific customer
-    }
-
-    public void getCustomerGraphDelta(int customerId, DateTime sinceLastSeen, long sinceRowId)
-    {
-        // Similar to getGraphDelta but with a WHERE clause for the specific customer
-    }
-}
-
-public sealed partial record TableIdentifier(string Schema, string Table)
-{
-    [GeneratedRegex(
-        @"^(?:\[([A-Za-z0-9]+)\]|([A-Za-z0-9]+))\.(?:\[([A-Za-z0-9]+)\]|([A-Za-z0-9]+))$"
-    )]
-    private static partial Regex TableRegex();
-
-    public static TableIdentifier Parse(string input)
-    {
-        var match = TableRegex().Match(input);
-
-        if (!match.Success)
-        {
-            throw new InvalidOperationException($"Invalid table identifier '{input}'.");
-        }
-
-        var schema = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
-
-        var table = match.Groups[3].Success ? match.Groups[3].Value : match.Groups[4].Value;
-
-        return new TableIdentifier(schema, table);
-    }
-
-    public static bool TryParse(string input, out TableIdentifier? result)
-    {
-        var match = TableRegex().Match(input);
-
-        if (!match.Success)
-        {
-            result = null;
-            return false;
-        }
-
-        var schema = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
-
-        var table = match.Groups[3].Success ? match.Groups[3].Value : match.Groups[4].Value;
-
-        result = new TableIdentifier(schema, table);
-        return true;
-    }
-
-    public override string ToString()
-    {
-        return $"[{Schema}].[{Table}]";
     }
 }
