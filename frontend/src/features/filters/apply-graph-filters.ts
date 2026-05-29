@@ -19,37 +19,20 @@ export function applyGraphFilters(
     return graph;
   }
 
-  let nodes = graph.nodes;
+  const nodesByFqdn = new Map(graph.nodes.map((node) => [node.fqdn, node]));
   let edges = graph.edges;
-  const hasNodeRules = activeRules.some(isNodeFilter);
-  const hasEdgeRules = activeRules.some(isEdgeFilter);
 
-  for (const rule of activeRules) {
-    if (isNodeFilter(rule)) {
-      nodes = nodes.filter((node) => nodeMatchesRule(node, rule));
-    }
-
-    if (isEdgeFilter(rule)) {
-      edges = edges.filter((edge) => edgeMatchesRule(edge, rule));
-    }
-  }
-
-  const visibleNodeIds = new Set(nodes.map((node) => node.fqdn));
-
-  edges = edges.filter(
-    (edge) => visibleNodeIds.has(edge.source_fqdn) && visibleNodeIds.has(edge.target_fqdn),
+  edges = edges.filter((edge) =>
+    activeRules.every((rule) => edgeMatchesRuleWithNodes(edge, rule, nodesByFqdn)),
   );
 
-  if (hasEdgeRules && !hasNodeRules) {
-    const connectedNodeIds = new Set<string>();
-
-    for (const edge of edges) {
-      connectedNodeIds.add(edge.source_fqdn);
-      connectedNodeIds.add(edge.target_fqdn);
-    }
-
-    nodes = nodes.filter((node) => connectedNodeIds.has(node.fqdn));
+  const connectedNodeIds = new Set<string>();
+  for (const edge of edges) {
+    connectedNodeIds.add(edge.source_fqdn);
+    connectedNodeIds.add(edge.target_fqdn);
   }
+
+  const nodes = graph.nodes.filter((node) => connectedNodeIds.has(node.fqdn));
 
   return {
     nodes,
@@ -68,6 +51,28 @@ function isEdgeFilter(rule: FilterRule): boolean {
   const target = getFilterTarget(rule.field);
 
   return target === "connection" || target === "both";
+}
+
+function edgeMatchesRuleWithNodes(
+  edge: GraphEdge,
+  rule: FilterRule,
+  nodesByFqdn: Map<string, GraphNode>,
+): boolean {
+  if (isEdgeFilter(rule)) {
+    return edgeMatchesRule(edge, rule);
+  }
+
+  if (!isNodeFilter(rule)) {
+    return true;
+  }
+
+  const sourceNode = nodesByFqdn.get(edge.source_fqdn);
+  const targetNode = nodesByFqdn.get(edge.target_fqdn);
+
+  return (
+    (sourceNode ? nodeMatchesRule(sourceNode, rule) : false) ||
+    (targetNode ? nodeMatchesRule(targetNode, rule) : false)
+  );
 }
 
 function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {

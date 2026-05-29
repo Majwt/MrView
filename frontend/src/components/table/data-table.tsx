@@ -71,7 +71,8 @@ export function DataTable<TData, TValue>({
                     className={cn(
                       "cursor-pointer select-none overflow-hidden text-ellipsis bg-background",
                       header.column.id === "protocol" && "w-16",
-                      isDateColumn(header.column.id) && "w-30",
+                      isPortColumn(header.column.id) && "w-24",
+                      isCountColumn(header.column.id) && "w-24",
                       isProtocolColumn(header.column.id) && "w-24",
                     )}
                     onClick={header.column.getToggleSortingHandler()}
@@ -111,7 +112,8 @@ export function DataTable<TData, TValue>({
                         className={cn(
                           "overflow-hidden text-ellipsis",
                           cell.column.id === "protocol" && "w-16",
-                          isDateColumn(cell.column.id) && "w-30",
+                          isPortColumn(cell.column.id) && "w-20",
+                          isCountColumn(cell.column.id) && "w-20",
                         )}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -141,3 +143,10 @@ function isProtocolColumn(columnId: string) {
   return columnId === "protocol" 
 }
 
+function isPortColumn(columnId: string) {
+  return columnId === "sourcePort" || columnId === "targetPort";
+}
+
+function isCountColumn(columnId: string) {
+  return columnId === "distinct_edges" || columnId === "connections" || columnId === "seenCount";
+}

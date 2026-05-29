@@ -1,7 +1,14 @@
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { DateCell } from "./date-cell";
-import { formatTableDate } from "./format-date";
+import {
+  HostCell,
+  NumericCell,
+  ProcessCell,
+  ProtocolCell,
+  RichDateCell,
+  SeenCountCell,
+  ServiceCell,
+} from "./styled-cells";
 
 export type TableConnection = {
   id: string;
@@ -24,54 +31,61 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
   {
     accessorKey: "protocol",
     header: "TCP/UDP",
-  },
-  {
-    accessorKey: "source",
-    header: "Local",
-  },
-  {
-    accessorKey: "sourceIp",
-    header: "Local IP",
-  },
-  {
-    accessorKey: "sourcePort",
-    header: "Local port",
-  },
-  {
-    accessorKey: "sourceProcess",
-    header: "Local proc",
-  },
-  {
-    accessorKey: "target",
-    header: "Peer",
-  },
-  {
-    accessorKey: "targetIp",
-    header: "Peer IP",
-  },
-  {
-    accessorKey: "targetPort",
-    header: "Peer port",
-  },
-  {
-    accessorKey: "targetProcess",
-    header: "Peer proc",
+    cell: ({ getValue }) => <ProtocolCell value={String(getValue() ?? "")} />,
   },
   {
     accessorKey: "serviceName",
     header: "Service",
+    cell: ({ getValue }) => <ServiceCell value={String(getValue() ?? "")} />,
+  },
+  {
+    accessorKey: "source",
+    header: "Local",
+    cell: ({ row }) => <HostCell primary={row.original.source} secondary={row.original.sourceIp} />,
+  },
+  // {
+  //   accessorKey: "sourceIp",
+  //   header: "Local IP",
+  //   cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
+  // },
+  {
+    accessorKey: "sourcePort",
+    header: "Src Port",
+    cell: ({ getValue }) => <NumericCell value={Number(getValue() ?? 0)} />,
+  },
+  {
+    accessorKey: "sourceProcess",
+    header: "Local proc",
+    cell: ({ getValue }) => <ProcessCell value={String(getValue() ?? "")} />,
+  },
+  {
+    accessorKey: "target",
+    header: "Peer",
+    cell: ({ row }) => <HostCell primary={row.original.target} secondary={row.original.targetIp} />,
+  },
+  // {
+  //   accessorKey: "targetIp",
+  //   header: "Peer IP",
+  //   cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
+  // },
+  {
+    accessorKey: "targetPort",
+    header: "Dst Port",
+    cell: ({ getValue }) => <NumericCell value={Number(getValue() ?? 0)} />,
+  },
+  {
+    accessorKey: "targetProcess",
+    header: "Peer proc",
+    cell: ({ getValue }) => <ProcessCell value={String(getValue() ?? "")} />,
   },
   {
     accessorKey: "seenCount",
-    header: "Seen count",
+    header: "# Seen",
+    cell: ({ getValue }) => <SeenCountCell value={Number(getValue() ?? 0)} />,
   },
   {
     accessorKey: "lastSeen",
     header: "Last seen",
-    cell: ({ row, getValue }) => {
-      const firstSeen = formatTableDate(row.original.firstSeen);
-
-      return <DateCell title={`First seen: ${firstSeen}`} value={getValue()} />;
-    },
+    cell: ({ getValue }) => <RichDateCell value={getValue()} />,
   },
 ];

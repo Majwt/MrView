@@ -36,7 +36,7 @@ export const filterFields: FilterFieldDefinition[] = [
   },
   { label: "Service name", value: "service_name", target: "connection", valueType: "text" },
   { label: "Service port", value: "service_port", target: "connection", valueType: "number" },
-  { label: "Seen count", value: "seen_count", target: "connection", valueType: "number" },
+  { label: "# Seen", value: "seen_count", target: "connection", valueType: "number" },
 ];
 
 export const filterOperators: { label: string; value: FilterOperator }[] = [

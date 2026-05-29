@@ -1,6 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { DateCell } from "./date-cell";
+import { HostCell, MonoIdCell, NumericCell, RichDateCell } from "./styled-cells";
 
 export type TableNode = {
   id: string;
@@ -18,31 +18,36 @@ export const nodeColumns: ColumnDef<TableNode>[] = [
   {
     accessorKey: "fqdn",
     header: "FQDN",
+    cell: ({ row }) => <HostCell primary={row.original.hostname || row.original.fqdn} secondary={row.original.fqdn} />,
   },
   {
     accessorKey: "ipv4",
     header: "IPv4",
+    cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
   },
   {
     accessorKey: "mac_address",
     header: "MAC Address",
+    cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
   },
   {
     accessorKey: "distinct_edges",
-    header: "# Distinct Edges",
+    header: "# Edges",
+    cell: ({ getValue }) => <NumericCell value={Number(getValue() ?? 0)} />,
   },
   {
     accessorKey: "connections",
-    header: "# Connections",
+    header: "# Conn",
+    cell: ({ getValue }) => <NumericCell value={Number(getValue() ?? 0)} emphasize />,
   },
   {
     accessorKey: "firstSeen",
     header: "First Seen",
-    cell: ({ getValue }) => <DateCell value={getValue()} />,
+    cell: ({ getValue }) => <RichDateCell value={getValue()} />,
   },
   {
     accessorKey: "lastSeen",
     header: "Last Seen",
-    cell: ({ getValue }) => <DateCell value={getValue()} />,
+    cell: ({ getValue }) => <RichDateCell value={getValue()} />,
   },
 ];
