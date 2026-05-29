@@ -15,6 +15,7 @@ import FilterBar from "./components/FilterBar";
 import { filtersReducer, initialFilters } from "./features/filters/filters-reducer";
 import { applyGraphFilters } from "./features/filters/apply-graph-filters";
 import { buildFilterSuggestions } from "./features/filters/filter-suggestions";
+import { applyGlobalSearch } from "./features/filters/apply-global-search";
 import { X } from "lucide-react";
 
 const REFRESH_INTERVAL_MS = 1 * 60 * 1000; // 1 minutes
@@ -27,8 +28,7 @@ export function App() {
   const [selectedNodeFqdn, setSelectedNodeFqdn] = useState<string | null>(null);
   const [hoveredNodeFqdn, setHoveredNodeFqdn] = useState<string | null>(null);
   const [hoveredConnectionIds, setHoveredConnectionIds] = useState<Set<string>>(() => new Set());
-  const [nodeSearch, setNodeSearch] = useState("");
-  const [connectionSearch, setConnectionSearch] = useState("");
+  const [globalSearch, setGlobalSearch] = useState("");
 
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialFilters);
   const filterSuggestions = useMemo(() => buildFilterSuggestions(snapshot), [snapshot]);
@@ -38,19 +38,27 @@ export function App() {
 
     return applyGraphFilters(snapshot, filters, "node");
   }, [snapshot, filters]);
+  const nodeSearchedSnapshot = useMemo(
+    () => applyGlobalSearch(nodeFilteredSnapshot, globalSearch, "node"),
+    [nodeFilteredSnapshot, globalSearch],
+  );
 
   const connectionFilteredSnapshot = useMemo(() => {
     if (!snapshot) return null;
 
     return applyGraphFilters(snapshot, filters, "connection");
   }, [snapshot, filters]);
+  const connectionSearchedSnapshot = useMemo(
+    () => applyGlobalSearch(connectionFilteredSnapshot, globalSearch, "connection"),
+    [connectionFilteredSnapshot, globalSearch],
+  );
 
   const selectedNodeConnectionSnapshot = useMemo(() => {
-    if (!connectionFilteredSnapshot || !selectedNodeFqdn) {
-      return connectionFilteredSnapshot;
+    if (!connectionSearchedSnapshot || !selectedNodeFqdn) {
+      return connectionSearchedSnapshot;
     }
 
-    const edges = connectionFilteredSnapshot.edges.filter(
+    const edges = connectionSearchedSnapshot.edges.filter(
       (edge) => edge.source_fqdn === selectedNodeFqdn || edge.target_fqdn === selectedNodeFqdn,
     );
     const connectedNodeIds = new Set<string>();
@@ -61,14 +69,14 @@ export function App() {
     }
 
     return {
-      ...connectionFilteredSnapshot,
-      nodes: connectionFilteredSnapshot.nodes.filter((node) => connectedNodeIds.has(node.fqdn)),
+      ...connectionSearchedSnapshot,
+      nodes: connectionSearchedSnapshot.nodes.filter((node) => connectedNodeIds.has(node.fqdn)),
       edges,
     };
-  }, [connectionFilteredSnapshot, selectedNodeFqdn]);
+  }, [connectionSearchedSnapshot, selectedNodeFqdn]);
 
   const graphSnapshot =
-    tableView === "nodes" ? nodeFilteredSnapshot : selectedNodeConnectionSnapshot;
+    tableView === "nodes" ? nodeSearchedSnapshot : selectedNodeConnectionSnapshot;
 
   const visibleNodeIds = useMemo(
     () => new Set(graphSnapshot?.nodes.map((node) => node.fqdn) ?? []),
@@ -81,9 +89,9 @@ export function App() {
   );
 
   const tableNodes: TableNode[] = useMemo(() => {
-    if (nodeFilteredSnapshot == null) return [];
+    if (nodeSearchedSnapshot == null) return [];
 
-    const tableNodes = nodeFilteredSnapshot.nodes.map((node) => {
+    const tableNodes = nodeSearchedSnapshot.nodes.map((node) => {
       const tableNode: TableNode = {
         id: node.id,
         fqdn: node.fqdn,
@@ -100,7 +108,7 @@ export function App() {
     });
 
     return tableNodes;
-  }, [nodeFilteredSnapshot]);
+  }, [nodeSearchedSnapshot]);
 
   const tableConnections: TableConnection[] = useMemo(() => {
     if (selectedNodeConnectionSnapshot == null) return [];
@@ -224,12 +232,8 @@ export function App() {
                 <Input
                   className="h-8 w-56"
                   placeholder={tableView === "nodes" ? "Search nodes..." : "Search connections..."}
-                  value={tableView === "nodes" ? nodeSearch : connectionSearch}
-                  onChange={(event) =>
-                    tableView === "nodes"
-                      ? setNodeSearch(event.target.value)
-                      : setConnectionSearch(event.target.value)
-                  }
+                  value={globalSearch}
+                  onChange={(event) => setGlobalSearch(event.target.value)}
                 />
 
                 {tableView === "nodes" ? (
@@ -287,9 +291,7 @@ export function App() {
                 columns={nodeColumns}
                 data={tableNodes}
                 getRowHoverId={(row) => row.fqdn}
-                globalFilter={nodeSearch}
                 hoveredRowId={hoveredNodeFqdn}
-                onGlobalFilterChange={setNodeSearch}
                 onRowHoverChange={setHoveredNodeFqdn}
               />
             ) : (
@@ -297,9 +299,7 @@ export function App() {
                 columns={connectionColumns}
                 data={tableConnections}
                 getRowHoverId={(row) => row.id}
-                globalFilter={connectionSearch}
                 hoveredRowIds={hoveredConnectionIds}
-                onGlobalFilterChange={setConnectionSearch}
                 onRowHoverChange={setHoveredConnectionId}
               />
             )}

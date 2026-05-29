@@ -1,6 +1,9 @@
 import Graph from "graphology";
 
 import type { GraphEdge, GraphNode } from "@/features/graph/types";
+import { DEFAULT_EDGE_CURVATURE, indexParallelEdgesIndex } from "@sigma/edge-curve";
+import { MultiGraph } from "graphology";
+import { fqdnToColor } from "@/lib/cssVarColor";
 
 export function buildSigmaGraph(nodes: GraphNode[], edges: GraphEdge[]) {
   const graph = new Graph({
@@ -48,6 +51,7 @@ function getNodeAttributes(node: GraphNode, index: number, includePosition = tru
           y: Math.cos(index) * 1,
         }
       : {}),
+    color: fqdnToColor(node.fqdn),
     size: 10,
   };
 }
@@ -150,8 +154,6 @@ function getEdgeAttributes(groupedEdges: GraphEdge[]) {
   };
 }
 
-import { DEFAULT_EDGE_CURVATURE, indexParallelEdgesIndex } from "@sigma/edge-curve";
-import { MultiGraph } from "graphology";
 
 function getCurvature(index: number, maxIndex: number): number {
   if (maxIndex <= 0) throw new Error("Invalid maxIndex");

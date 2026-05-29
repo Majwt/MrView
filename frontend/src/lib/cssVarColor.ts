@@ -11,6 +11,23 @@ export function cssVarColor(name: string) {
   return oklchToHex(oklch);
 }
 
+function getFqdnSuffix(fqdn: string): string {
+  const parts = fqdn.split(".").filter(Boolean);
+  return parts.length ? parts[parts.length - 1].toLowerCase() : fqdn.toLowerCase();
+}
+
+export function fqdnToColor(fqdn: string): string {
+  const suffix = getFqdnSuffix(fqdn);
+  let hash = 0;
+  for (let i = 0; i < suffix.length; i += 1) {
+    hash = (hash * 48 + suffix.charCodeAt(i)) >>> 0;
+  }
+  const r = 64 + (hash & 0x7f);
+  const g = 64 + ((hash >>> 8) & 0x7f);
+  const b = 64 + ((hash >>> 16) & 0x7f);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
 export function cssVarColorRgba(name: string, alpha?: number): string {
   const color = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 

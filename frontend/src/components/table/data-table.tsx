@@ -72,6 +72,7 @@ export function DataTable<TData, TValue>({
                       "cursor-pointer select-none overflow-hidden text-ellipsis bg-background",
                       header.column.id === "protocol" && "w-16",
                       isDateColumn(header.column.id) && "w-30",
+                      isProtocolColumn(header.column.id) && "w-24",
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                   >
@@ -136,3 +137,7 @@ export function DataTable<TData, TValue>({
 function isDateColumn(columnId: string) {
   return columnId === "firstSeen" || columnId === "lastSeen";
 }
+function isProtocolColumn(columnId: string) {
+  return columnId === "protocol" 
+}
+
