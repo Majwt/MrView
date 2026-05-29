@@ -95,6 +95,7 @@ export function App() {
     () => new Map((snapshot?.nodes ?? []).map((node) => [node.fqdn, node])),
     [snapshot],
   );
+  const selectedNode = selectedNodeFqdn ? nodesByFqdn.get(selectedNodeFqdn) : undefined;
   const contextNodeFqdn = hoveredNodeFqdn ?? selectedNodeFqdn;
   const contextNode = contextNodeFqdn ? nodesByFqdn.get(contextNodeFqdn) : undefined;
   const primaryInterface = contextNode?.interfaces[0];
@@ -144,7 +145,6 @@ export function App() {
 
   function selectNodeConnections(fqdn: string) {
     setSelectedNodeFqdn(fqdn);
-    setTableView("connections");
   }
 
   function setHoveredConnectionId(id: string | null) {
@@ -338,13 +338,20 @@ export function App() {
               </div>
             </div>
             {tableView === "nodes" ? (
-              <DataTable
-                columns={nodeColumns}
-                data={tableNodes}
-                getRowHoverId={(row) => row.fqdn}
-                hoveredRowId={hoveredNodeFqdn}
-                onRowHoverChange={setHoveredNodeFqdn}
-              />
+              selectedNode ? (
+                <NodeDetailsPanel
+                  node={selectedNode}
+                  onBack={() => setSelectedNodeFqdn(null)}
+                />
+              ) : (
+                <DataTable
+                  columns={nodeColumns}
+                  data={tableNodes}
+                  getRowHoverId={(row) => row.fqdn}
+                  hoveredRowId={hoveredNodeFqdn}
+                  onRowHoverChange={setHoveredNodeFqdn}
+                />
+              )
             ) : (
               <DataTable
                 columns={connectionColumns}
@@ -362,3 +369,83 @@ export function App() {
 }
 
 export default App;
+
+function NodeDetailsPanel({
+  node,
+  onBack,
+}: {
+  node: NonNullable<GraphSnapshot["nodes"][number]>;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto rounded-md border bg-background p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold">Node Details</h2>
+          <p className="font-mono text-xs text-muted-foreground">{node.fqdn}</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={onBack}>
+          Back To Table
+        </Button>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Identity
+          </h3>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <InfoItem label="Hostname" value={node.hostname} />
+            <InfoItem label="FQDN" value={node.fqdn} mono />
+            <InfoItem label="Customer" value={node.customer.name} />
+            <InfoItem label="CMDB CI ID" value={node.customer.cmdb_ci_id} mono />
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Activity
+          </h3>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <InfoItem label="# Distinct Edges" value={String(node.distinct_edge)} mono />
+            <InfoItem label="# Connections" value={String(node.connection_count)} mono />
+            <InfoItem label="First Seen" value={node.first_seen} mono />
+            <InfoItem label="Last Seen" value={node.last_seen} mono />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Interfaces
+        </h3>
+        <div className="space-y-2">
+          {node.interfaces.map((netInterface, index) => (
+            <div
+              key={`${netInterface.ip}-${index}`}
+              className="rounded-md border bg-muted/20 p-3 text-xs"
+            >
+              <div className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                Interface {index + 1}
+              </div>
+              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                <InfoItem label="IP" value={netInterface.ip} mono />
+                <InfoItem label="Subnet" value={netInterface.subnet} mono />
+                <InfoItem label="MAC" value={netInterface.mac} mono />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoItem({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded-md border bg-muted/15 px-3 py-2">
+      <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={mono ? "font-mono text-xs" : "text-sm"}>{value || "-"}</div>
+    </div>
+  );
+}
