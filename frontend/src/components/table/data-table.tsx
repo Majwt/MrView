@@ -136,11 +136,8 @@ export function DataTable<TData, TValue>({
   );
 }
 
-function isDateColumn(columnId: string) {
-  return columnId === "firstSeen" || columnId === "lastSeen";
-}
 function isProtocolColumn(columnId: string) {
-  return columnId === "protocol" 
+  return columnId === "protocol";
 }
 
 function isPortColumn(columnId: string) {

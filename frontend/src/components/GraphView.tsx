@@ -25,6 +25,7 @@ type GraphViewProps = {
   hoveredEdgeIds?: Set<string>;
   onEdgeHoverChange?: (edgeIds: string[]) => void;
   onNodeHoverChange?: (fqdn: string | null) => void;
+  onNodeHoverPositionChange?: (position: { x: number; y: number } | null) => void;
   onNodeSelect?: (fqdn: string) => void;
 };
 
@@ -63,6 +64,7 @@ export default function GraphView({
   hoveredEdgeIds,
   onEdgeHoverChange,
   onNodeHoverChange,
+  onNodeHoverPositionChange,
   onNodeSelect,
 }: GraphViewProps) {
   const graphRef = useRef(buildSigmaGraph(nodes, edges));
@@ -108,6 +110,7 @@ export default function GraphView({
   const settingsRef = useRef(settings);
   const onEdgeHoverChangeRef = useRef(onEdgeHoverChange);
   const onNodeHoverChangeRef = useRef(onNodeHoverChange);
+  const onNodeHoverPositionChangeRef = useRef(onNodeHoverPositionChange);
   const onNodeSelectRef = useRef(onNodeSelect);
 
   useEffect(() => {
@@ -121,6 +124,9 @@ export default function GraphView({
   useEffect(() => {
     onNodeHoverChangeRef.current = onNodeHoverChange;
   }, [onNodeHoverChange]);
+  useEffect(() => {
+    onNodeHoverPositionChangeRef.current = onNodeHoverPositionChange;
+  }, [onNodeHoverPositionChange]);
 
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
@@ -155,11 +161,15 @@ export default function GraphView({
     const handleClickNode = ({ node }: { node: string }) => {
       onNodeSelectRef.current?.(node);
     };
-    const handleEnterNode = ({ node }: { node: string }) => {
+    const handleEnterNode = ({ node, event }: { node: string; event?: { x?: number; y?: number } }) => {
       onNodeHoverChangeRef.current?.(node);
+      if (typeof event?.x === "number" && typeof event?.y === "number") {
+        onNodeHoverPositionChangeRef.current?.({ x: event.x, y: event.y });
+      }
     };
     const handleLeaveNode = () => {
       onNodeHoverChangeRef.current?.(null);
+      onNodeHoverPositionChangeRef.current?.(null);
     };
     const handleEnterEdge = ({ edge }: { edge: string }) => {
       const connections =

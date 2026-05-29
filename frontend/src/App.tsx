@@ -16,6 +16,7 @@ import { filtersReducer, initialFilters } from "./features/filters/filters-reduc
 import { applyGraphFilters } from "./features/filters/apply-graph-filters";
 import { buildFilterSuggestions } from "./features/filters/filter-suggestions";
 import { applyGlobalSearch } from "./features/filters/apply-global-search";
+import { Badge } from "./components/ui/badge";
 import { X } from "lucide-react";
 
 const REFRESH_INTERVAL_MS = 1 * 60 * 1000; // 1 minutes
@@ -27,6 +28,9 @@ export function App() {
   const [tableView, setTableView] = useState<"nodes" | "connections">("nodes");
   const [selectedNodeFqdn, setSelectedNodeFqdn] = useState<string | null>(null);
   const [hoveredNodeFqdn, setHoveredNodeFqdn] = useState<string | null>(null);
+  const [hoveredNodePosition, setHoveredNodePosition] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [hoveredConnectionIds, setHoveredConnectionIds] = useState<Set<string>>(() => new Set());
   const [globalSearch, setGlobalSearch] = useState("");
 
@@ -87,6 +91,13 @@ export function App() {
     () => new Set(graphSnapshot?.edges.map((edge) => edge.id) ?? []),
     [graphSnapshot],
   );
+  const nodesByFqdn = useMemo(
+    () => new Map((snapshot?.nodes ?? []).map((node) => [node.fqdn, node])),
+    [snapshot],
+  );
+  const contextNodeFqdn = hoveredNodeFqdn ?? selectedNodeFqdn;
+  const contextNode = contextNodeFqdn ? nodesByFqdn.get(contextNodeFqdn) : undefined;
+  const primaryInterface = contextNode?.interfaces[0];
 
   const tableNodes: TableNode[] = useMemo(() => {
     if (nodeSearchedSnapshot == null) return [];
@@ -208,7 +219,7 @@ export function App() {
         </header>
 
         <main className="grid h-[calc(100vh-3.5rem)] grid-rows-2 overflow-hidden">
-          <section className="min-h-0 border-b">
+          <section className="relative min-h-0 border-b">
             {snapshot ? (
               <GraphView
                 edges={snapshot.edges}
@@ -219,11 +230,52 @@ export function App() {
                 hoveredNodeId={hoveredNodeFqdn}
                 onEdgeHoverChange={(edgeIds) => setHoveredConnectionIds(new Set(edgeIds))}
                 onNodeHoverChange={setHoveredNodeFqdn}
+                onNodeHoverPositionChange={setHoveredNodePosition}
                 onNodeSelect={selectNodeConnections}
               />
             ) : (
               <div className="p-6 text-sm text-muted-foreground">No data to display.</div>
             )}
+            {contextNode && hoveredNodePosition ? (
+              <div
+                className="pointer-events-none absolute z-20 max-w-[30rem] rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm backdrop-blur"
+                style={{
+                  left: `${hoveredNodePosition.x + 14}px`,
+                  top: `${hoveredNodePosition.y + 14}px`,
+                }}
+              >
+                <div className="mb-1 inline-flex items-center gap-2">
+                  <Badge variant="outline" className="h-5">
+                    Customer
+                  </Badge>
+                  <span className="font-medium">{contextNode.customer.name || "Unknown"}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                  <span>Node</span>
+                  <span className="font-mono text-[11px] text-foreground">{contextNode.fqdn}</span>
+                  {contextNode.customer.cmdb_ci_id ? (
+                    <>
+                      <span>CMDB</span>
+                      <span className="font-mono text-[11px] text-foreground">
+                        {contextNode.customer.cmdb_ci_id}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+                {primaryInterface ? (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                    <span>IP</span>
+                    <span className="font-mono text-[11px] text-foreground">{primaryInterface.ip}</span>
+                    <span>Subnet</span>
+                    <span className="font-mono text-[11px] text-foreground">
+                      {primaryInterface.subnet}
+                    </span>
+                    <span>MAC</span>
+                    <span className="font-mono text-[11px] text-foreground">{primaryInterface.mac}</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
           <section className="flex min-h-0 flex-col overflow-hidden p-4">
@@ -285,7 +337,6 @@ export function App() {
                 </Button>
               </div>
             </div>
-
             {tableView === "nodes" ? (
               <DataTable
                 columns={nodeColumns}
