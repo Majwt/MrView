@@ -20,10 +20,10 @@ export type FilterOperator =
   | "is"
   | "isNot"
   | "contains"
+  | "doesNotContain"
   | "greaterThan"
   | "lessThan"
-  | "between"
-  | "hasAnyValue";
+  | "between";
 
 export type FilterValueType = "text" | "number" | "date" | "select";
 export type FilterTarget = "node" | "connection" | "both";

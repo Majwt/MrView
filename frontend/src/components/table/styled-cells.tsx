@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Activity, Plug, Terminal } from "lucide-react";
 import { formatTableDate } from "./format-date";
@@ -33,12 +32,6 @@ export function NumericCell({ value, emphasize = false }: { value: number; empha
   );
 }
 
-export function ProtocolCell({ value }: { value: string }) {
-  const normalized = value.toUpperCase();
-  const variant = normalized === "TCP" ? "default" : normalized === "UDP" ? "secondary" : "outline";
-
-  return <Badge variant={variant}>{normalized || "N/A"}</Badge>;
-}
 
 export function ProcessCell({ value }: { value: string }) {
   if (!value) return <span className="text-muted-foreground">-</span>;
@@ -63,7 +56,7 @@ export function ServiceCell({ value }: { value: string }) {
 }
 
 export function SeenCountCell({ value }: { value: number }) {
-  const emphasize = value >= 100;
+  const emphasize = value >= 5000;
 
   return (
     <div className="inline-flex w-full items-center justify-end gap-1.5">
@@ -104,6 +97,9 @@ function formatRelativeTime(value: unknown) {
   const minute = 60 * 1000;
   const hour = 60 * minute;
   const day = 24 * hour;
+  if (absMs < minute) {
+    return "Just now"
+  }
 
   if (absMs < hour) {
     return rtf.format(Math.round(diffMs / minute), "minute");

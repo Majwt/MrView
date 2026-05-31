@@ -64,7 +64,6 @@ export function AppSidebar() {
       <SidebarFooter>
         <div className="flex flex-row items-center gap-2 px-2 py-2">
           <div className="px-2 py-2 text-xs text-muted-foreground">v0.1.0</div>
-          <ThemeToggle />
         </div>
       </SidebarFooter>
     </Sidebar>

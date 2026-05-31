@@ -19,8 +19,9 @@ import { applyGlobalSearch } from "./features/filters/apply-global-search";
 import { Badge } from "./components/ui/badge";
 import { X } from "lucide-react";
 import { HostCell, MonoIdCell, NumericCell, RichDateCell } from "@/components/table/styled-cells";
+import { ThemeToggle } from "./components/theme-toggle";
 
-const REFRESH_INTERVAL_MS = 1 * 60 * 1000; // 1 minutes
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
 
 export function App() {
   const [snapshot, setSnapshot] = useState<GraphSnapshot | null>(null);
@@ -212,11 +213,11 @@ export function App() {
       <AppSidebar />
 
       <SidebarInset>
-        <header className="flex h-14 items-center gap-2 border-b px-4">
+        <header className="flex h-14 justify-between items-center gap-2 border-b px-4">
           <SidebarTrigger />
-          <div>
-            <h1 className="text-sm font-medium">Graph</h1>
-          </div>
+          <h1 className="text-sm font-medium">Graph</h1>
+          <ThemeToggle />
+
         </header>
 
         <main className="grid h-[calc(100vh-3.5rem)] grid-rows-2 overflow-hidden">
@@ -398,7 +399,7 @@ function NodeDetailsPanel({
           </h3>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             <DetailItem label="FQDN">
-              <HostCell primary={node.fqdn} secondary={node.hostname || undefined} />
+              <HostCell primary={node.fqdn}  />
             </DetailItem>
             <DetailItem label="Customer">
               <div className="space-y-0.5">
@@ -440,21 +441,18 @@ function NodeDetailsPanel({
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Interfaces
         </h3>
-        <div className="space-y-2">
+        <div className="space-y-2 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {node.interfaces.map((netInterface, index) => (
             <div
               key={`${netInterface.ip}-${index}`}
               className="rounded-md border bg-muted/20 p-3 text-xs"
             >
               <div className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                Interface {index + 1}
+                {netInterface.adapter}
               </div>
-              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-2">
                 <DetailItem label="IP">
                   <HostCell primary={netInterface.ip} secondary={netInterface.subnet || undefined} />
-                </DetailItem>
-                <DetailItem label="Subnet">
-                  <MonoIdCell value={netInterface.subnet} />
                 </DetailItem>
                 <DetailItem label="MAC">
                   <MonoIdCell value={netInterface.mac} />

@@ -3,6 +3,7 @@ import type { FilterRule, FiltersState, FilterTarget } from "./types";
 
 export type FiltersAction =
   | { type: "addRule"; rule: FilterRule }
+  | { type: "replaceRules"; rules: FilterRule[] }
   | { type: "removeRule"; id: string }
   | { type: "updateRule"; id: string; patch: Partial<FilterRule> }
   | { type: "clearRules"; target?: FilterTarget };
@@ -17,6 +18,12 @@ export function filtersReducer(state: FiltersState, action: FiltersAction): Filt
       return {
         ...state,
         rules: [...state.rules, action.rule],
+      };
+
+    case "replaceRules":
+      return {
+        ...state,
+        rules: action.rules,
       };
 
     case "removeRule":

@@ -19,7 +19,7 @@ export function applyGraphFilters(graph: GraphSnapshot, filters: FiltersState): 
         );
 
   const edges = graph.edges.filter((edge) => {
-    if (!edgeRules.every((rule) => edgeMatchesRule(edge, rule))) {
+    if (!matchesRuleGroups(edgeRules, (rule) => edgeMatchesRule(edge, rule))) {
       return false;
     }
 
@@ -57,7 +57,7 @@ function isEdgeRule(rule: FilterRule): boolean {
 }
 
 function nodeMatchesAllRules(node: GraphNode, rules: FilterRule[]) {
-  return rules.every((rule) => nodeMatchesRule(node, rule));
+  return matchesRuleGroups(rules, (rule) => nodeMatchesRule(node, rule));
 }
 
 function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {
@@ -69,10 +69,16 @@ function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {
       return matches(node.hostname, rule);
 
     case "ip":
-      return node.interfaces.some((netInterface) => matches(netInterface.ip, rule));
+      return matchesAnyValue(
+        node.interfaces.map((netInterface) => netInterface.ip),
+        rule,
+      );
 
     case "mac":
-      return node.interfaces.some((netInterface) => matches(netInterface.mac, rule));
+      return matchesAnyValue(
+        node.interfaces.map((netInterface) => netInterface.mac),
+        rule,
+      );
 
     case "customer":
       return matches(node.customer.name, rule);
@@ -97,10 +103,10 @@ function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {
 function edgeMatchesRule(edge: GraphEdge, rule: FilterRule): boolean {
   switch (rule.field) {
     case "fqdn":
-      return matches(edge.source_fqdn, rule) || matches(edge.target_fqdn, rule);
+      return matchesAnyValue([edge.source_fqdn, edge.target_fqdn], rule);
 
     case "ip":
-      return matches(edge.source_ip, rule) || matches(edge.target_ip, rule);
+      return matchesAnyValue([edge.source_ip, edge.target_ip], rule);
 
     case "first_seen":
       return matches(edge.first_seen, rule);
@@ -109,13 +115,13 @@ function edgeMatchesRule(edge: GraphEdge, rule: FilterRule): boolean {
       return matches(edge.last_seen, rule);
 
     case "process_name":
-      return matches(edge.source_process_name, rule) || matches(edge.target_process_name, rule);
+      return matchesAnyValue([edge.source_process_name, edge.target_process_name], rule);
 
     case "protocol":
       return matches(edge.protocol, rule);
 
     case "service_port":
-      return matches(edge.target_port, rule) || matches(edge.source_port, rule);
+      return matchesAnyValue([edge.target_port, edge.source_port], rule);
 
     case "service_name":
       return matches(edge.service_name, rule);
@@ -134,11 +140,35 @@ function edgeMatchesRule(edge: GraphEdge, rule: FilterRule): boolean {
   }
 }
 
-function isUsableRule(rule: FilterRule): boolean {
-  if (rule.operator === "hasAnyValue") {
-    return true;
+function matchesRuleGroups(rules: FilterRule[], matcher: (rule: FilterRule) => boolean) {
+  const rulesByField = new Map<FilterRule["field"], FilterRule[]>();
+
+  for (const rule of rules) {
+    rulesByField.set(rule.field, [...(rulesByField.get(rule.field) ?? []), rule]);
   }
 
+  return Array.from(rulesByField.values()).every((fieldRules) => {
+    const narrowingRules = fieldRules.filter(isNarrowingRule);
+    const alternativeRules = fieldRules.filter((rule) => !isNarrowingRule(rule));
+
+    return (
+      narrowingRules.every((rule) => matcher(rule)) &&
+      (alternativeRules.length === 0 || alternativeRules.some((rule) => matcher(rule)))
+    );
+  });
+}
+
+function isNarrowingRule(rule: FilterRule) {
+  return (
+    rule.operator === "doesNotContain" ||
+    rule.operator === "isNot" ||
+    rule.operator === "greaterThan" ||
+    rule.operator === "lessThan" ||
+    rule.operator === "between"
+  );
+}
+
+function isUsableRule(rule: FilterRule): boolean {
   if (rule.operator === "between") {
     return Array.isArray(rule.value) && rule.value.length === 2;
   }
@@ -178,6 +208,11 @@ function matches(actualValue: string | number | null | undefined, rule: FilterRu
         .toLowerCase()
         .includes(String(filterValue ?? "").toLowerCase());
 
+    case "doesNotContain":
+      return !String(actualValue ?? "")
+        .toLowerCase()
+        .includes(String(filterValue ?? "").toLowerCase());
+
     case "greaterThan":
       return toComparableValue(actualValue, valueType) > toComparableValue(filterValue, valueType);
 
@@ -198,12 +233,17 @@ function matches(actualValue: string | number | null | undefined, rule: FilterRu
       );
     }
 
-    case "hasAnyValue":
-      return actualValue !== null && actualValue !== undefined && actualValue !== "";
-
     default:
       return true;
   }
+}
+
+function matchesAnyValue(values: Array<string | number | null | undefined>, rule: FilterRule) {
+  if (rule.operator === "doesNotContain") {
+    return values.every((value) => matches(value, rule));
+  }
+
+  return values.some((value) => matches(value, rule));
 }
 
 function toComparableValue(value: unknown, valueType: string) {

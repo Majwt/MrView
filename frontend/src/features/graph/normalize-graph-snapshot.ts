@@ -45,7 +45,7 @@ function addMissingEndpoint(
   placeholder.lastSeen = maxDateString(placeholder.lastSeen, edge.last_seen);
 
   if (ip && !placeholder.interfacesByIp.has(ip)) {
-    placeholder.interfacesByIp.set(ip, { ip, mac: "", subnet: "" });
+    placeholder.interfacesByIp.set(ip, { adapter: "Unknown", ip, mac: "", subnet: "" });
   }
 }
 

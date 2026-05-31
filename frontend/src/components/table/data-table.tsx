@@ -73,7 +73,6 @@ export function DataTable<TData, TValue>({
                       header.column.id === "protocol" && "w-16",
                       isPortColumn(header.column.id) && "w-24",
                       isCountColumn(header.column.id) && "w-24",
-                      isProtocolColumn(header.column.id) && "w-24",
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                   >
@@ -136,9 +135,6 @@ export function DataTable<TData, TValue>({
   );
 }
 
-function isProtocolColumn(columnId: string) {
-  return columnId === "protocol" 
-}
 
 function isPortColumn(columnId: string) {
   return columnId === "sourcePort" || columnId === "targetPort";

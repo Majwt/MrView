@@ -5,6 +5,7 @@ export type Customer = {
 };
 
 export type NetInterface = {
+  adapter: string;
   ip: string;
   mac: string;
   subnet: string;
