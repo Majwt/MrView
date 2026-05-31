@@ -6,7 +6,7 @@ import GraphView from "./components/GraphView";
 import { DataTable } from "@/components/table/data-table";
 import { connectionColumns, type TableConnection } from "@/components/table/connection-columns";
 import { nodeColumns, type TableNode } from "@/components/table/node-columns";
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
 import type { GraphSnapshot } from "./features/graph/types";
 import { fetchGraphDelta, fetchGraphSnapshot } from "./api/graph-api";
 import { applyGraphDelta } from "./features/graph/apply-graph-delta";
@@ -18,6 +18,7 @@ import { buildFilterSuggestions } from "./features/filters/filter-suggestions";
 import { applyGlobalSearch } from "./features/filters/apply-global-search";
 import { Badge } from "./components/ui/badge";
 import { X } from "lucide-react";
+import { HostCell, MonoIdCell, NumericCell, RichDateCell } from "@/components/table/styled-cells";
 
 const REFRESH_INTERVAL_MS = 1 * 60 * 1000; // 1 minutes
 
@@ -40,7 +41,7 @@ export function App() {
   const nodeFilteredSnapshot = useMemo(() => {
     if (!snapshot) return null;
 
-    return applyGraphFilters(snapshot, filters, "node");
+    return applyGraphFilters(snapshot, filters);
   }, [snapshot, filters]);
   const nodeSearchedSnapshot = useMemo(
     () => applyGlobalSearch(nodeFilteredSnapshot, globalSearch, "node"),
@@ -50,7 +51,7 @@ export function App() {
   const connectionFilteredSnapshot = useMemo(() => {
     if (!snapshot) return null;
 
-    return applyGraphFilters(snapshot, filters, "connection");
+    return applyGraphFilters(snapshot, filters);
   }, [snapshot, filters]);
   const connectionSearchedSnapshot = useMemo(
     () => applyGlobalSearch(connectionFilteredSnapshot, globalSearch, "connection"),
@@ -232,6 +233,7 @@ export function App() {
                 onNodeHoverChange={setHoveredNodeFqdn}
                 onNodeHoverPositionChange={setHoveredNodePosition}
                 onNodeSelect={selectNodeConnections}
+                onStageClick={() => setSelectedNodeFqdn(null)}
               />
             ) : (
               <div className="p-6 text-sm text-muted-foreground">No data to display.</div>
@@ -394,11 +396,22 @@ function NodeDetailsPanel({
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Identity
           </h3>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <InfoItem label="Hostname" value={node.hostname} />
-            <InfoItem label="FQDN" value={node.fqdn} mono />
-            <InfoItem label="Customer" value={node.customer.name} />
-            <InfoItem label="CMDB CI ID" value={node.customer.cmdb_ci_id} mono />
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <DetailItem label="FQDN">
+              <HostCell primary={node.fqdn} secondary={node.hostname || undefined} />
+            </DetailItem>
+            <DetailItem label="Customer">
+              <div className="space-y-0.5">
+                <div className="text-sm">{node.customer.name || "-"}</div>
+                <div className="flex flex-row gap-1">
+                  <div className="text-[11px] text-muted-foreground">Customer ID</div>
+                  <div className="text-[11px] text-muted-foreground font-bold">{node.customer.id}</div>
+                </div>
+              </div>
+            </DetailItem>
+            <DetailItem label="CmdbCiId">
+              <MonoIdCell value={node.customer.cmdb_ci_id} />
+            </DetailItem>
           </div>
         </div>
 
@@ -406,11 +419,19 @@ function NodeDetailsPanel({
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Activity
           </h3>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <InfoItem label="# Distinct Edges" value={String(node.distinct_edge)} mono />
-            <InfoItem label="# Connections" value={String(node.connection_count)} mono />
-            <InfoItem label="First Seen" value={node.first_seen} mono />
-            <InfoItem label="Last Seen" value={node.last_seen} mono />
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
+            <DetailItem label="# Distinct Edges">
+              <NumericCell value={node.distinct_edge} emphasize />
+            </DetailItem>
+            <DetailItem label="# Connections">
+              <NumericCell value={node.connection_count} emphasize />
+            </DetailItem>
+            <DetailItem label="Last Seen">
+              <RichDateCell value={node.last_seen} />
+            </DetailItem>
+            <DetailItem label="First Seen">
+              <RichDateCell value={node.first_seen} />
+            </DetailItem>
           </div>
         </div>
       </div>
@@ -429,9 +450,15 @@ function NodeDetailsPanel({
                 Interface {index + 1}
               </div>
               <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                <InfoItem label="IP" value={netInterface.ip} mono />
-                <InfoItem label="Subnet" value={netInterface.subnet} mono />
-                <InfoItem label="MAC" value={netInterface.mac} mono />
+                <DetailItem label="IP">
+                  <HostCell primary={netInterface.ip} secondary={netInterface.subnet || undefined} />
+                </DetailItem>
+                <DetailItem label="Subnet">
+                  <MonoIdCell value={netInterface.subnet} />
+                </DetailItem>
+                <DetailItem label="MAC">
+                  <MonoIdCell value={netInterface.mac} />
+                </DetailItem>
               </div>
             </div>
           ))}
@@ -441,11 +468,17 @@ function NodeDetailsPanel({
   );
 }
 
-function InfoItem({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function DetailItem({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <div className="rounded-md border bg-muted/15 px-3 py-2">
       <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={mono ? "font-mono text-xs" : "text-sm"}>{value || "-"}</div>
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }

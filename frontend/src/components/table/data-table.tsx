@@ -59,9 +59,9 @@ export function DataTable<TData, TValue>({
   });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col ">
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">
-        <table className="w-full caption-bottom table-fixed text-sm">
+        <table className="w-full caption-bottom  text-sm">
           <TableHeader className="sticky top-0 z-10 bg-background">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -137,7 +137,7 @@ export function DataTable<TData, TValue>({
 }
 
 function isProtocolColumn(columnId: string) {
-  return columnId === "protocol";
+  return columnId === "protocol" 
 }
 
 function isPortColumn(columnId: string) {

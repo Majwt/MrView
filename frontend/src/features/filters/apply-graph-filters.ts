@@ -1,37 +1,40 @@
 import type { GraphEdge, GraphNode, GraphSnapshot } from "../graph/types";
-import {
-  filterAppliesToTarget,
-  getFilterFieldDefinition,
-  getFilterTarget,
-} from "./filter-definitions";
-import type { FilterRule, FiltersState, FilterTarget } from "./types";
+import { getFilterFieldDefinition, getFilterTarget } from "./filter-definitions";
+import type { FilterRule, FiltersState } from "./types";
 
-export function applyGraphFilters(
-  graph: GraphSnapshot,
-  filters: FiltersState,
-  target?: Exclude<FilterTarget, "both">,
-): GraphSnapshot {
-  const activeRules = filters.rules
-    .filter((rule) => !target || filterAppliesToTarget(rule.field, target))
-    .filter(isUsableRule);
+export function applyGraphFilters(graph: GraphSnapshot, filters: FiltersState): GraphSnapshot {
+  const activeRules = filters.rules.filter(isUsableRule);
 
   if (activeRules.length === 0) {
     return graph;
   }
 
-  const nodesByFqdn = new Map(graph.nodes.map((node) => [node.fqdn, node]));
-  let edges = graph.edges;
+  const nodeRules = activeRules.filter((rule) => isNodeRule(rule));
+  const edgeRules = activeRules.filter((rule) => isEdgeRule(rule));
+  const matchingNodeIds =
+    nodeRules.length === 0
+      ? null
+      : new Set(
+          graph.nodes.filter((node) => nodeMatchesAllRules(node, nodeRules)).map((node) => node.fqdn),
+        );
 
-  edges = edges.filter((edge) =>
-    activeRules.every((rule) => edgeMatchesRuleWithNodes(edge, rule, nodesByFqdn)),
-  );
+  const edges = graph.edges.filter((edge) => {
+    if (!edgeRules.every((rule) => edgeMatchesRule(edge, rule))) {
+      return false;
+    }
+
+    if (!matchingNodeIds) {
+      return true;
+    }
+
+    return matchingNodeIds.has(edge.source_fqdn) || matchingNodeIds.has(edge.target_fqdn);
+  });
 
   const connectedNodeIds = new Set<string>();
   for (const edge of edges) {
     connectedNodeIds.add(edge.source_fqdn);
     connectedNodeIds.add(edge.target_fqdn);
   }
-
   const nodes = graph.nodes.filter((node) => connectedNodeIds.has(node.fqdn));
 
   return {
@@ -41,38 +44,20 @@ export function applyGraphFilters(
   };
 }
 
-function isNodeFilter(rule: FilterRule): boolean {
+function isNodeRule(rule: FilterRule): boolean {
   const target = getFilterTarget(rule.field);
 
   return target === "node" || target === "both";
 }
 
-function isEdgeFilter(rule: FilterRule): boolean {
+function isEdgeRule(rule: FilterRule): boolean {
   const target = getFilterTarget(rule.field);
 
   return target === "connection" || target === "both";
 }
 
-function edgeMatchesRuleWithNodes(
-  edge: GraphEdge,
-  rule: FilterRule,
-  nodesByFqdn: Map<string, GraphNode>,
-): boolean {
-  if (isEdgeFilter(rule)) {
-    return edgeMatchesRule(edge, rule);
-  }
-
-  if (!isNodeFilter(rule)) {
-    return true;
-  }
-
-  const sourceNode = nodesByFqdn.get(edge.source_fqdn);
-  const targetNode = nodesByFqdn.get(edge.target_fqdn);
-
-  return (
-    (sourceNode ? nodeMatchesRule(sourceNode, rule) : false) ||
-    (targetNode ? nodeMatchesRule(targetNode, rule) : false)
-  );
+function nodeMatchesAllRules(node: GraphNode, rules: FilterRule[]) {
+  return rules.every((rule) => nodeMatchesRule(node, rule));
 }
 
 function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {

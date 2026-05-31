@@ -27,6 +27,7 @@ type GraphViewProps = {
   onNodeHoverChange?: (fqdn: string | null) => void;
   onNodeHoverPositionChange?: (position: { x: number; y: number } | null) => void;
   onNodeSelect?: (fqdn: string) => void;
+  onStageClick?: () => void;
 };
 
 function useSigmaColors() {
@@ -66,6 +67,7 @@ export default function GraphView({
   onNodeHoverChange,
   onNodeHoverPositionChange,
   onNodeSelect,
+  onStageClick,
 }: GraphViewProps) {
   const graphRef = useRef(buildSigmaGraph(nodes, edges));
   const rendererRef = useRef<Sigma<Attributes, Attributes, Attributes> | null>(null);
@@ -112,6 +114,7 @@ export default function GraphView({
   const onNodeHoverChangeRef = useRef(onNodeHoverChange);
   const onNodeHoverPositionChangeRef = useRef(onNodeHoverPositionChange);
   const onNodeSelectRef = useRef(onNodeSelect);
+  const onStageClickRef = useRef(onStageClick);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -131,6 +134,10 @@ export default function GraphView({
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect;
   }, [onNodeSelect]);
+
+  useEffect(() => {
+    onStageClickRef.current = onStageClick;
+  }, [onStageClick]);
 
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -161,14 +168,19 @@ export default function GraphView({
     const handleClickNode = ({ node }: { node: string }) => {
       onNodeSelectRef.current?.(node);
     };
+    const handleClickStage = () => {
+      onStageClickRef.current?.();
+    };
     const handleEnterNode = ({ node, event }: { node: string; event?: { x?: number; y?: number } }) => {
       onNodeHoverChangeRef.current?.(node);
+      onEdgeHoverChangeRef.current?.(graph.edges(node));
       if (typeof event?.x === "number" && typeof event?.y === "number") {
         onNodeHoverPositionChangeRef.current?.({ x: event.x, y: event.y });
       }
     };
     const handleLeaveNode = () => {
       onNodeHoverChangeRef.current?.(null);
+      onEdgeHoverChangeRef.current?.([]);
       onNodeHoverPositionChangeRef.current?.(null);
     };
     const handleEnterEdge = ({ edge }: { edge: string }) => {
@@ -182,6 +194,7 @@ export default function GraphView({
     };
 
     renderer.on("clickNode", handleClickNode);
+    renderer.on("clickStage", handleClickStage);
     renderer.on("enterEdge", handleEnterEdge);
     renderer.on("enterNode", handleEnterNode);
     renderer.on("leaveEdge", handleLeaveEdge);
@@ -189,6 +202,7 @@ export default function GraphView({
 
     return () => {
       renderer.removeListener("clickNode", handleClickNode);
+      renderer.removeListener("clickStage", handleClickStage);
       renderer.removeListener("enterEdge", handleEnterEdge);
       renderer.removeListener("enterNode", handleEnterNode);
       renderer.removeListener("leaveEdge", handleLeaveEdge);

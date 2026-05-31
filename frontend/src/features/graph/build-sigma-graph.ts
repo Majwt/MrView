@@ -150,7 +150,7 @@ function getEdgeAttributes(groupedEdges: GraphEdge[]) {
     connections: groupedEdges,
     seenCount: totalSeenCount,
     lastSeen: first.last_seen,
-    size: 5,
+    size: 3.3,
   };
 }
 

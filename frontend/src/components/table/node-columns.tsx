@@ -18,13 +18,13 @@ export const nodeColumns: ColumnDef<TableNode>[] = [
   {
     accessorKey: "fqdn",
     header: "FQDN",
-    cell: ({ row }) => <HostCell primary={row.original.hostname || row.original.fqdn} secondary={row.original.fqdn} />,
+    cell: ({ row }) => <HostCell primary={row.original.fqdn} secondary={row.original.ipv4} />,
   },
-  {
-    accessorKey: "ipv4",
-    header: "IPv4",
-    cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
-  },
+  // {
+  //   accessorKey: "ipv4",
+  //   header: "IPv4",
+  //   cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
+  // },
   {
     accessorKey: "mac_address",
     header: "MAC Address",
@@ -41,13 +41,13 @@ export const nodeColumns: ColumnDef<TableNode>[] = [
     cell: ({ getValue }) => <NumericCell value={Number(getValue() ?? 0)} emphasize />,
   },
   {
-    accessorKey: "firstSeen",
-    header: "First Seen",
+    accessorKey: "lastSeen",
+    header: "Last Seen",
     cell: ({ getValue }) => <RichDateCell value={getValue()} />,
   },
   {
-    accessorKey: "lastSeen",
-    header: "Last Seen",
+    accessorKey: "firstSeen",
+    header: "First Seen",
     cell: ({ getValue }) => <RichDateCell value={getValue()} />,
   },
 ];

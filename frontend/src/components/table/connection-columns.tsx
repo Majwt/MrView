@@ -4,7 +4,6 @@ import {
   HostCell,
   NumericCell,
   ProcessCell,
-  ProtocolCell,
   RichDateCell,
   SeenCountCell,
   ServiceCell,
@@ -28,11 +27,6 @@ export type TableConnection = {
 };
 
 export const connectionColumns: ColumnDef<TableConnection>[] = [
-  {
-    accessorKey: "protocol",
-    header: "TCP/UDP",
-    cell: ({ getValue }) => <ProtocolCell value={String(getValue() ?? "")} />,
-  },
   {
     accessorKey: "serviceName",
     header: "Service",

@@ -10,12 +10,15 @@ export function forceSupervisorLayout(renderer: Sigma, graph: Graph) {
   const layout = new ForceSupervisor(graph, {
     isNodeFixed: (_node, attr) => attr.fixed,
     settings: {
-      attraction: 0.0005,
-      repulsion: 1,
+      attraction: 0.000002,
+      repulsion: 10,
+      gravity: 0.00001,
+      inertia: 0.6,
+      maxMove: 10000,
     },
   });
 
-  const cleanupDrag = enableNodeDragging(renderer, graph, layout);
+  const cleanupDrag = shouldEnableNodeDragging() ? enableNodeDragging(renderer, graph, layout) : () => {};
 
   layout.start();
 
@@ -26,9 +29,30 @@ export function forceSupervisorLayout(renderer: Sigma, graph: Graph) {
   };
 }
 
+function shouldEnableNodeDragging() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.matchMedia("(pointer: fine)").matches;
+}
+
 function enableNodeDragging(renderer: Sigma, graph: Graph, supervisor?: ForceSupervisor) {
   let draggedNode: string | null = null;
   let isDragging = false;
+  let suppressCameraPanUntilMouseUp = false;
+
+  const endDrag = () => {
+    if (draggedNode) {
+      graph.removeNodeAttribute(draggedNode, "fixed");
+    }
+
+    isDragging = false;
+    draggedNode = null;
+
+    renderer.getCamera().enable();
+    supervisor?.start(); // optional
+  };
 
   const onDownNode = (e: SigmaNodeEventPayload) => {
     isDragging = true;
@@ -41,7 +65,15 @@ function enableNodeDragging(renderer: Sigma, graph: Graph, supervisor?: ForceSup
   };
 
   const onMouseMove = (e: MouseCoords) => {
-    if (!isDragging || !draggedNode) return;
+    if (!isDragging || !draggedNode) {
+      if (suppressCameraPanUntilMouseUp) {
+        e.preventSigmaDefault();
+        e.original.preventDefault();
+        e.original.stopPropagation();
+      }
+
+      return;
+    }
 
     const pos = renderer.viewportToGraph(e);
 
@@ -54,25 +86,29 @@ function enableNodeDragging(renderer: Sigma, graph: Graph, supervisor?: ForceSup
   };
 
   const onMouseUp = () => {
-    if (draggedNode) {
-      graph.removeNodeAttribute(draggedNode, "fixed");
+    endDrag();
+    suppressCameraPanUntilMouseUp = false;
+  };
+
+  const onMouseLeave = () => {
+    if (!isDragging) {
+      return;
     }
 
-    isDragging = false;
-    draggedNode = null;
-
-    renderer.getCamera().enable();
-    supervisor?.start(); // optional
+    endDrag();
+    suppressCameraPanUntilMouseUp = true;
   };
 
   renderer.on("downNode", onDownNode);
   renderer.getMouseCaptor().on("mousemovebody", onMouseMove);
   renderer.getMouseCaptor().on("mouseup", onMouseUp);
+  renderer.getMouseCaptor().on("mouseleave", onMouseLeave);
 
   // cleanup function
   return () => {
     renderer.removeListener("downNode", onDownNode);
     renderer.getMouseCaptor().removeListener("mousemovebody", onMouseMove);
     renderer.getMouseCaptor().removeListener("mouseup", onMouseUp);
+    renderer.getMouseCaptor().removeListener("mouseleave", onMouseLeave);
   };
 }
