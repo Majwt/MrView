@@ -12,8 +12,29 @@ export function cssVarColor(name: string) {
 }
 
 function getFqdnSuffix(fqdn: string): string {
-  const parts = fqdn.split(".").filter(Boolean);
-  return parts.length ? parts[parts.length - 1].toLowerCase() : fqdn.toLowerCase();
+  const fqdnParts = fqdn.split(".").filter(Boolean);
+  // example:
+  // www.foo.bar.baz.local
+  if (fqdnParts.length < 2) {
+    return fqdn;
+  }
+  // fqdn is at least foo.bar.fizz 
+  if (fqdnParts[0].match(/www|api|app|mail|ftp|ns1|ns2/)) {
+    fqdnParts.shift();
+    // foo.bar.baz.local
+  }
+  
+  fqdnParts.shift(); // remove the leftmost part (e.g., "foo" in "foo.bar.com") assuming this is the hostname
+  // bar.baz.local
+
+  if (fqdnParts.at(-1)?.match(/com|net|org|io|gov|edu|local|arpa|in-arpa/)) {
+    // ignore the rightmost part if it's a common TLD, to get the real "domain" that actually identifies the service
+    fqdnParts.pop();
+    // bar.baz
+  }
+  
+  return fqdnParts.slice(-2).join(".");
+  // bar.baz
 }
 
 export function fqdnToColor(fqdn: string): string {
@@ -25,7 +46,8 @@ export function fqdnToColor(fqdn: string): string {
   const r = 64 + (hash & 0x7f);
   const g = 64 + ((hash >>> 8) & 0x7f);
   const b = 64 + ((hash >>> 16) & 0x7f);
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  const color = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  return color;
 }
 
 export function cssVarColorRgba(name: string, alpha?: number): string {
