@@ -10,7 +10,7 @@ public sealed record NodeDto(
     long DistinctEdge,
     long ConnectionCount,
     Customer Customer,
-    DateTime FirstSeen,
-    DateTime LastSeen
+    DateTimeOffset FirstSeen,
+    DateTimeOffset LastSeen
 );
 

@@ -6,13 +6,9 @@ public sealed record EdgeEntity(
     string EndpointA,
     string EndpointB,
 
-    string Protocol,
-
     string ServiceFqdn,
     int? ServicePort,
     string ServiceName,
-
-    string KnownProcessName,
 
     string SourceIp,
     long? SourcePort,
@@ -27,7 +23,7 @@ public sealed record EdgeEntity(
     string? TargetProcessName,
 
     long SeenCount,
-    DateTime LastSeen,
-    DateTime FirstSeen,
+    DateTimeOffset LastSeen,
+    DateTimeOffset FirstSeen,
     string EdgeKey // stable id based on the edge properties, not the database row id, computed in the database
 );

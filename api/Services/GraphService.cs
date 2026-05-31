@@ -75,7 +75,6 @@ public class GraphService
                 dtos.Add(
                     new EdgeDto(
                         e.EdgeKey,
-                        e.Protocol,
                         e.ServiceName,
                         e.SourceIp,
                         e.SourcePort,

@@ -38,13 +38,10 @@ public class Db
         id,
         endpoint_a,
         endpoint_b,
-        protocol,
 
         service_fqdn,
         service_port,
         service_name,
-
-        known_process_name,
 
         seen_count,
 
@@ -86,7 +83,10 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen.ToString(Config.datetimeFormat));
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
+        {
+            Value = cursor.LastSeen
+        });
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
         command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
         await using var reader = await command.ExecuteReaderAsync();
@@ -123,7 +123,10 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen.ToString(Config.datetimeFormat));
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
+        {
+            Value = cursor.LastSeen
+        });
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
         command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
         command.Parameters.AddWithValue("@CustomerId", customerId);
@@ -148,13 +151,11 @@ public class Db
         var endpointAOrdinal = reader.GetOrdinal("endpoint_a");
         var endpointBOrdinal = reader.GetOrdinal("endpoint_b");
 
-        var protocolOrdinal = reader.GetOrdinal("protocol");
 
         var serviceFqdnOrdinal = reader.GetOrdinal("service_fqdn");
         var servicePortOrdinal = reader.GetOrdinal("service_port");
         var serviceNameOrdinal = reader.GetOrdinal("service_name");
 
-        var knownProcessNameOrdinal = reader.GetOrdinal("known_process_name");
 
         var seenCountOrdinal = reader.GetOrdinal("seen_count");
 
@@ -185,7 +186,6 @@ public class Db
             var endpointA = reader.GetString(endpointAOrdinal);
             var endpointB = reader.GetString(endpointBOrdinal);
 
-            var protocol = reader.GetString(protocolOrdinal);
 
 
             var serviceFqdn = reader.GetString(serviceFqdnOrdinal);
@@ -194,9 +194,6 @@ public class Db
                 ? null
                 : (int?)reader.GetInt32(servicePortOrdinal);
 
-            var knownProcessName = reader.IsDBNull(knownProcessNameOrdinal)
-                ? ""
-                : reader.GetString(knownProcessNameOrdinal);
 
             var sourceIp = reader.GetString(sourceIpOrdinal);
             var sourcePort = reader.IsDBNull(sourcePortOrdinal)
@@ -230,8 +227,8 @@ public class Db
                 : reader.GetString(targetProcessNameOrdinal);
 
             var seenCount = reader.GetInt64(seenCountOrdinal);
-            var lastSeen = reader.GetDateTime(lastSeenOrdinal);
-            var firstSeen = reader.GetDateTime(firstSeenOrdinal);
+            var lastSeen = reader.GetDateTimeOffset(lastSeenOrdinal);
+            var firstSeen = reader.GetDateTimeOffset(firstSeenOrdinal);
 
             var edgeKey = reader.GetString(edgeKeyOrdinal);
 
@@ -239,11 +236,9 @@ public class Db
                 Id: id,
                 EndpointA: endpointA,
                 EndpointB: endpointB,
-                Protocol: protocol,
                 ServiceFqdn: serviceFqdn,
                 ServicePort: servicePort,
                 ServiceName: serviceName,
-                KnownProcessName: knownProcessName,
                 SeenCount: seenCount,
                 SourceIp: sourceIp,
                 SourcePort: sourcePort,
@@ -273,7 +268,7 @@ public class Db
         CmdbCiId,
         Customer,
         CustomerID,
-        DistinctEdges,
+        EdgeCount,
         ConnectionCount,
         FirstSeen,
         LastSeen
@@ -298,7 +293,10 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen.ToString(Config.datetimeFormat));
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
+        {
+            Value = cursor.LastSeen
+        });
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenNodeId);
         await using var reader = await command.ExecuteReaderAsync();
 
@@ -332,7 +330,10 @@ public class Db
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@CustomerId", customerId);
-        command.Parameters.AddWithValue("@LastSeen", cursor.LastSeen.ToString(Config.datetimeFormat));
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
+        {
+            Value = cursor.LastSeen
+        });
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenNodeId);
         await using var reader = await command.ExecuteReaderAsync();
 
@@ -356,7 +357,7 @@ public class Db
 
         var interfacesJsonOrdinal = reader.GetOrdinal("InterfacesJson");
 
-        var distinctEdgesOrdinal = reader.GetOrdinal("DistinctEdges");
+        var distinctEdgesOrdinal = reader.GetOrdinal("EdgeCount");
         var connectionCountOrdinal = reader.GetOrdinal("ConnectionCount");
 
         var customerOrdinal = reader.GetOrdinal("Customer");
@@ -391,8 +392,8 @@ public class Db
             var cmdbCiId = reader.GetString(cmdbCiIdOrdinal);
             var customerId = reader.GetInt32(customerIdOrdinal);
 
-            var firstSeen = reader.GetDateTime(firstSeenOrdinal);
-            var lastSeen = reader.GetDateTime(lastSeenOrdinal);
+            var firstSeen = reader.GetDateTimeOffset(firstSeenOrdinal);
+            var lastSeen = reader.GetDateTimeOffset(lastSeenOrdinal);
 
             var customer = new Customer(Name: customerName, CmdbCiId: cmdbCiId, Id: customerId);
 

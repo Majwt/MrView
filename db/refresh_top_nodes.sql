@@ -1,7 +1,7 @@
 USE AxiNetStat;
 GO
 
-CREATE OR ALTER PROCEDURE test.refresh_top_nodes
+CREATE OR ALTER PROCEDURE dbo.refresh_top_nodes
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -12,40 +12,45 @@ BEGIN
 
         ;WITH node_base AS (
             SELECT
-                Fqdn,
+                Fqdn = LOWER(Fqdn),
+
                 CmdbCiId = MAX(CmdbCiId),
                 Customer = MAX(Customer),
                 CustomerID = MAX(CustomerID),
+
+                EphemeralPortStart = MIN(EphemeralPortStart),
+                EphemeralPortEnd = MAX(EphemeralPortEnd),
+
                 FirstSeen = MIN(DateAdded),
                 LastSeen = MAX(DateAdded)
-            FROM test.nodes
-            GROUP BY Fqdn
+            FROM dbo.nodes
+            GROUP BY LOWER(Fqdn)
         ),
         edge_rows AS (
             SELECT
                 node_fqdn = endpoint_a,
-                edge_id = id,
+                edge_id = Id,
                 seen_count
-            FROM test.top_connections
+            FROM dbo.top_connections
 
             UNION ALL
 
             SELECT
                 node_fqdn = endpoint_b,
-                edge_id = id,
+                edge_id = Id,
                 seen_count
-            FROM test.top_connections
+            FROM dbo.top_connections
             WHERE endpoint_b <> endpoint_a
         ),
         edge_agg AS (
             SELECT
                 node_fqdn,
-                DistinctEdges = COUNT(DISTINCT edge_id),
+                EdgeCount = COUNT(DISTINCT edge_id),
                 ConnectionCount = SUM(seen_count)
             FROM edge_rows
             GROUP BY node_fqdn
         )
-        MERGE test.top_nodes AS target
+        MERGE dbo.top_nodes AS target
         USING (
             SELECT
                 n.Fqdn,
@@ -59,26 +64,31 @@ BEGIN
 
                 InterfacesJson = (
                     SELECT
+                        x.AdapterName AS adapter,
                         x.AddressIPv4 AS ip,
                         x.MacAddress AS mac,
                         x.Subnet AS subnet
                     FROM (
                         SELECT DISTINCT
+                            AdapterName,
                             AddressIPv4,
                             MacAddress,
                             Subnet
-                        FROM test.nodes ni
-                        WHERE ni.Fqdn = n.Fqdn
+                        FROM dbo.nodes ni
+                        WHERE LOWER(ni.Fqdn) = n.Fqdn
                     ) x
-                    ORDER BY x.AddressIPv4, x.MacAddress
+                    ORDER BY x.AddressIPv4, x.AdapterName
                     FOR JSON PATH
                 ),
+
+                n.EphemeralPortStart,
+                n.EphemeralPortEnd,
 
                 n.CmdbCiId,
                 n.Customer,
                 n.CustomerID,
 
-                DistinctEdges = ISNULL(e.DistinctEdges, 0),
+                EdgeCount = ISNULL(e.EdgeCount, 0),
                 ConnectionCount = ISNULL(e.ConnectionCount, 0),
 
                 n.FirstSeen,
@@ -93,10 +103,12 @@ BEGIN
             UPDATE SET
                 Hostname = source.Hostname,
                 InterfacesJson = source.InterfacesJson,
+                EphemeralPortStart = source.EphemeralPortStart,
+                EphemeralPortEnd = source.EphemeralPortEnd,
                 CmdbCiId = source.CmdbCiId,
                 Customer = source.Customer,
                 CustomerID = source.CustomerID,
-                DistinctEdges = source.DistinctEdges,
+                EdgeCount = source.EdgeCount,
                 ConnectionCount = source.ConnectionCount,
                 FirstSeen = source.FirstSeen,
                 LastSeen = source.LastSeen
@@ -106,10 +118,12 @@ BEGIN
                 Fqdn,
                 Hostname,
                 InterfacesJson,
+                EphemeralPortStart,
+                EphemeralPortEnd,
                 CmdbCiId,
                 Customer,
                 CustomerID,
-                DistinctEdges,
+                EdgeCount,
                 ConnectionCount,
                 FirstSeen,
                 LastSeen
@@ -118,10 +132,12 @@ BEGIN
                 source.Fqdn,
                 source.Hostname,
                 source.InterfacesJson,
+                source.EphemeralPortStart,
+                source.EphemeralPortEnd,
                 source.CmdbCiId,
                 source.Customer,
                 source.CustomerID,
-                source.DistinctEdges,
+                source.EdgeCount,
                 source.ConnectionCount,
                 source.FirstSeen,
                 source.LastSeen
