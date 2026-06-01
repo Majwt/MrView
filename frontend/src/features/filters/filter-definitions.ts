@@ -12,7 +12,7 @@ export type FilterFieldDefinition = {
 export const filterFields: FilterFieldDefinition[] = [
   { label: "FQDN", value: "fqdn", target: "both", valueType: "text" },
   { label: "Hostname", value: "hostname", target: "node", valueType: "text" },
-  { label: "IP", value: "ip", target: "both", valueType: "text" },
+  { label: "IPv4", value: "ip", target: "both", valueType: "text" },
   { label: "MAC address", value: "mac", target: "both", valueType: "text", advanced: true },
   { label: "Customer", value: "customer", target: "both", valueType: "text" },
   {
@@ -38,11 +38,11 @@ export const filterFields: FilterFieldDefinition[] = [
     valueType: "text",
   },
   {
-    label: "Service name",
+    label: "Service",
     value: "service_name",
     target: "connection",
     valueType: "text",
-    advanced: true,
+    advanced: false,
   },
   { label: "Service port", value: "service_port", target: "connection", valueType: "number" },
   { label: "# Seen", value: "seen_count", target: "connection", valueType: "number", advanced: true },

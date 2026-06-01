@@ -23,7 +23,7 @@ export function NumericCell({ value, emphasize = false }: { value: number; empha
   return (
     <span
       className={cn(
-        "block text-right font-mono tabular-nums",
+        "block text-right font-mono",
         emphasize ? "font-semibold text-foreground" : "text-muted-foreground",
       )}
     >

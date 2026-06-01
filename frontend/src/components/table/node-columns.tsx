@@ -1,4 +1,4 @@
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, SortingFn } from "@tanstack/react-table";
 
 import { HostCell, MonoIdCell, NumericCell, RichDateCell } from "./styled-cells";
 
@@ -12,6 +12,10 @@ export type TableNode = {
   connections: number;
   firstSeen: string;
   lastSeen: string;
+};
+
+const dateSortingFn: SortingFn<TableNode> = (rowA, rowB, columnId) => {
+  return toTimestamp(rowA.getValue(columnId)) - toTimestamp(rowB.getValue(columnId));
 };
 
 export const nodeColumns: ColumnDef<TableNode>[] = [
@@ -43,11 +47,21 @@ export const nodeColumns: ColumnDef<TableNode>[] = [
   {
     accessorKey: "lastSeen",
     header: "Last Seen",
+    sortingFn: dateSortingFn,
+    sortDescFirst: true,
     cell: ({ getValue }) => <RichDateCell value={getValue()} />,
   },
   {
     accessorKey: "firstSeen",
     header: "First Seen",
+    sortingFn: dateSortingFn,
+    sortDescFirst: true,
     cell: ({ getValue }) => <RichDateCell value={getValue()} />,
   },
 ];
+
+function toTimestamp(value: unknown) {
+  const timestamp = Date.parse(String(value ?? ""));
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}

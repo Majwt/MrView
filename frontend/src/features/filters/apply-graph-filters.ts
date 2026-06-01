@@ -239,9 +239,16 @@ function matches(actualValue: string | number | null | undefined, rule: FilterRu
 }
 
 function matchesAnyValue(values: Array<string | number | null | undefined>, rule: FilterRule) {
-  if (rule.operator === "doesNotContain") {
+  if (isNarrowingRule(rule)) {
     return values.every((value) => matches(value, rule));
+
   }
+  // if (rule.operator === "doesNotContain") {
+  //   return values.every((value) => matches(value, rule));
+  // }
+  // if (rule.operator === "isNot") {
+  //   return values.every((value) => matches(value, rule));
+  // }
 
   return values.some((value) => matches(value, rule));
 }
