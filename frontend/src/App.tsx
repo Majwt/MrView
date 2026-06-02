@@ -2,7 +2,6 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/s
 import { AppSidebar } from "./components/AppSidebar";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import GraphView from "./components/GraphView";
 import { DataTable } from "@/components/table/data-table";
 import { connectionColumns, type TableConnection } from "@/components/table/connection-columns";
 import { nodeColumns, type TableNode } from "@/components/table/node-columns";
@@ -21,6 +20,7 @@ import { X } from "lucide-react";
 import { ThemeToggle } from "./components/theme-toggle";
 import { readUrlState, writeUrlState, type TableView } from "./features/url-state";
 import NodeDetailsPanel from "./components/NodeDetailsPanel";
+import GraphViewD3 from "./components/GraphViewD3";
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
 
@@ -63,30 +63,7 @@ export function App() {
     [connectionFilteredSnapshot, globalSearch],
   );
 
-  const selectedNodeConnectionSnapshot = useMemo(() => {
-    if (!connectionSearchedSnapshot || !selectedNodeFqdn) {
-      return connectionSearchedSnapshot;
-    }
-
-    const edges = connectionSearchedSnapshot.edges.filter(
-      (edge) => edge.source_fqdn === selectedNodeFqdn || edge.target_fqdn === selectedNodeFqdn,
-    );
-    const connectedNodeIds = new Set<string>();
-
-    for (const edge of edges) {
-      connectedNodeIds.add(edge.source_fqdn);
-      connectedNodeIds.add(edge.target_fqdn);
-    }
-
-    return {
-      ...connectionSearchedSnapshot,
-      nodes: connectionSearchedSnapshot.nodes.filter((node) => connectedNodeIds.has(node.fqdn)),
-      edges,
-    };
-  }, [connectionSearchedSnapshot, selectedNodeFqdn]);
-
-  const graphSnapshot =
-    tableView === "nodes" ? nodeSearchedSnapshot : selectedNodeConnectionSnapshot;
+  const graphSnapshot = tableView === "nodes" ? nodeSearchedSnapshot : connectionSearchedSnapshot;
 
   const visibleNodeIds = useMemo(
     () => new Set(graphSnapshot?.nodes.map((node) => node.fqdn) ?? []),
@@ -129,9 +106,16 @@ export function App() {
   }, [nodeSearchedSnapshot]);
 
   const tableConnections: TableConnection[] = useMemo(() => {
-    if (selectedNodeConnectionSnapshot == null) return [];
+    if (connectionSearchedSnapshot == null) return [];
 
-    return selectedNodeConnectionSnapshot.edges.map((edge) => ({
+    const edges = selectedNodeFqdn
+      ? connectionSearchedSnapshot.edges.filter(
+          (edge) =>
+            edge.source_fqdn === selectedNodeFqdn || edge.target_fqdn === selectedNodeFqdn,
+        )
+      : connectionSearchedSnapshot.edges;
+
+    return edges.map((edge) => ({
       id: edge.id,
       source: edge.source_fqdn,
       sourceIp: edge.source_ip,
@@ -147,7 +131,7 @@ export function App() {
       firstSeen: edge.first_seen,
       lastSeen: edge.last_seen,
     }));
-  }, [selectedNodeConnectionSnapshot]);
+  }, [connectionSearchedSnapshot, selectedNodeFqdn]);
 
   function selectNodeConnections(fqdn: string) {
     setSelectedNodeFqdn(fqdn);
@@ -253,13 +237,14 @@ export function App() {
         <main className="grid h-[calc(100vh-3.5rem)] grid-rows-2 overflow-hidden">
           <section className="relative min-h-0 border-b">
             {snapshot ? (
-              <GraphView
+              <GraphViewD3
                 edges={snapshot.edges}
                 nodes={snapshot.nodes}
                 visibleEdgeIds={visibleEdgeIds}
                 visibleNodeIds={visibleNodeIds}
                 hoveredEdgeIds={hoveredConnectionIds}
                 hoveredNodeId={hoveredNodeFqdn}
+                selectedNodeId={selectedNodeFqdn}
                 onEdgeHoverChange={(edgeIds) => setHoveredConnectionIds(new Set(edgeIds))}
                 onNodeHoverChange={setHoveredNodeFqdn}
                 onNodeHoverPositionChange={setHoveredNodePosition}
@@ -402,4 +387,3 @@ export function App() {
 }
 
 export default App;
-

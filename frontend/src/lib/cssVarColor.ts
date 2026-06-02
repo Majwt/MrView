@@ -11,7 +11,7 @@ export function cssVarColor(name: string) {
   return oklchToHex(oklch);
 }
 
-function getFqdnSuffix(fqdn: string): string {
+export function getFqdnSuffix(fqdn: string): string {
   const fqdnParts = fqdn.split(".").filter(Boolean);
   // example:
   // www.foo.bar.baz.local

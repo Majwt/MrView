@@ -90,7 +90,7 @@ export function AppSidebar() {
 
       <SidebarContent>
         {sections.map((section) => (
-          <SidebarGroup>
+          <SidebarGroup key={section.title}>
             <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
