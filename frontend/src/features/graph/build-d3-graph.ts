@@ -2,19 +2,9 @@ import type { GraphEdge, GraphNode } from "@/features/graph/types";
 import { fqdnToColor } from "@/lib/cssVarColor";
 import * as d3 from "d3";
 
-export type D3Node = GraphNode &
-  d3.SimulationNodeDatum & {
-    id: string;
-    x: number;
-    y: number;
-    fx: number | null;
-    fy: number | null;
-  };
-
-export type D3Edge = d3.SimulationLinkDatum<D3Node> & GraphEdge;
 
 export type CanvasDragSubject = {
-  node: D3Node;
+  node: GraphNode;
   x: number;
   y: number;
 };
@@ -50,10 +40,10 @@ type EdgeMetadata = {
 type RenderGraphParams = {
   context: CanvasRenderingContext2D;
   edgePairCounts: Map<string, number>;
-  edges: D3Edge[];
+  edges: GraphEdge[];
   focus: FocusState;
   height: number;
-  hoveredNode: D3Node | null;
+  hoveredNode: GraphNode | null;
   hoveredNodeId?: string | null;
   labelBackground: string;
   labelZoomThresholds: Map<string, number>;
@@ -64,15 +54,15 @@ type RenderGraphParams = {
   visibleEdgeIds: Set<string>;
   visibleNodeIds: Set<string>;
   width: number;
-  nodes: D3Node[];
+  nodes: GraphNode[];
   hoveredEdgeIds?: Set<string>;
 };
 
-export function createD3Nodes(nodes: GraphNode[]) {
-  return nodes.map((node) => ({ ...node, id: node.fqdn })) as D3Node[];
+export function createGraphNodes(nodes: GraphNode[]) {
+  return nodes.map((node) => ({ ...node, id: node.fqdn })) as GraphNode[];
 }
 
-export function createD3Edges(edges: GraphEdge[], nodeIds: Set<string>) {
+export function createGraphEdges(edges: GraphEdge[], nodeIds: Set<string>) {
   return edges
     .filter((edge) => nodeIds.has(edge.source_fqdn) && nodeIds.has(edge.target_fqdn))
     .map(
@@ -81,11 +71,11 @@ export function createD3Edges(edges: GraphEdge[], nodeIds: Set<string>) {
           ...edge,
           source: edge.source_fqdn,
           target: edge.target_fqdn,
-        }) satisfies D3Edge,
+        }) satisfies GraphEdge,
     );
 }
 
-export function buildEdgeMetadata(edges: D3Edge[]): EdgeMetadata {
+export function buildEdgeMetadata(edges: GraphEdge[]): EdgeMetadata {
   const edgePairCounts = new Map<string, number>();
   const connectionCountByNode = new Map<string, number>();
 
@@ -180,7 +170,7 @@ export function findVisibleNodeAt({
   visibleNodeIds,
 }: {
   point: [number, number];
-  simulation: d3.Simulation<D3Node, undefined>;
+  simulation: d3.Simulation<GraphNode, undefined>;
   transform: d3.ZoomTransform;
   visibleNodeIds: Set<string>;
 }) {
@@ -190,12 +180,12 @@ export function findVisibleNodeAt({
   return node && isNodeVisible(node, visibleNodeIds) ? node : null;
 }
 
-export function getNode(nodes: D3Node[], node: string | number | D3Node | undefined): D3Node {
+export function getNode(nodes: GraphNode[], node: string | number | GraphNode | undefined): GraphNode {
   if (typeof node === "object" && node !== null) return node;
   return nodes.find((candidate) => candidate.id === String(node)) ?? nodes[0];
 }
 
-export function edgesConnectedTo(edges: D3Edge[], nodes: D3Node[], node: D3Node) {
+export function edgesConnectedTo(edges: GraphEdge[], nodes: GraphNode[], node: GraphNode) {
   return edges.filter((edge) => {
     const source = getNode(nodes, edge.source);
     const target = getNode(nodes, edge.target);
@@ -203,7 +193,7 @@ export function edgesConnectedTo(edges: D3Edge[], nodes: D3Node[], node: D3Node)
   });
 }
 
-export function edgeConnectionIds(edge: D3Edge) {
+export function edgeConnectionIds(edge: GraphEdge) {
   return [edge.id];
 }
 
@@ -217,11 +207,11 @@ export function getFocusState({
   visibleEdgeIds,
   visibleNodeIds,
 }: {
-  edges: D3Edge[];
+  edges: GraphEdge[];
   hoveredEdgeIds?: Set<string>;
-  hoveredNode: D3Node | null;
+  hoveredNode: GraphNode | null;
   hoveredNodeId?: string | null;
-  nodes: D3Node[];
+  nodes: GraphNode[];
   selectedNodeId?: string | null;
   visibleEdgeIds: Set<string>;
   visibleNodeIds: Set<string>;
@@ -273,7 +263,7 @@ export function getFocusState({
 }
 
 export function buildLabelZoomThresholds(
-  nodes: D3Node[],
+  nodes: GraphNode[],
   connectionCountByNode: Map<string, number>,
 ) {
   const scoredNodes = nodes
@@ -320,10 +310,10 @@ function drawEdges(
     visibleNodeIds,
   }: {
     edgePairCounts: Map<string, number>;
-    edges: D3Edge[];
+    edges: GraphEdge[];
     focus: FocusState;
     hoveredEdgeIds?: Set<string>;
-    nodes: D3Node[];
+    nodes: GraphNode[];
     visibleEdgeIds: Set<string>;
     visibleNodeIds: Set<string>;
   },
@@ -366,9 +356,9 @@ function drawNodes(
     visibleNodeIds,
   }: {
     focus: FocusState;
-    hoveredNode: D3Node | null;
+    hoveredNode: GraphNode | null;
     hoveredNodeId?: string | null;
-    nodes: D3Node[];
+    nodes: GraphNode[];
     selectedNodeId?: string | null;
     visibleNodeIds: Set<string>;
   },
@@ -414,11 +404,11 @@ function drawLabels(
     visibleNodeIds,
   }: {
     focus: FocusState;
-    hoveredNode: D3Node | null;
+    hoveredNode: GraphNode | null;
     hoveredNodeId?: string | null;
     labelBackground: string;
     labelZoomThresholds: Map<string, number>;
-    nodes: D3Node[];
+    nodes: GraphNode[];
     selectedNodeId?: string | null;
     textColor: string;
     transform: d3.ZoomTransform;
@@ -469,10 +459,10 @@ function shouldDrawLabel({
   selectedNodeId,
   transform,
 }: {
-  hoveredNode: D3Node | null;
+  hoveredNode: GraphNode | null;
   hoveredNodeId?: string | null;
   labelZoomThresholds: Map<string, number>;
-  node: D3Node;
+  node: GraphNode;
   selectedNodeId?: string | null;
   transform: d3.ZoomTransform;
 }) {
@@ -493,8 +483,8 @@ function shouldDrawLabel({
 
 function drawEdgePath(
   context: CanvasRenderingContext2D,
-  source: D3Node,
-  target: D3Node,
+  source: GraphNode,
+  target: GraphNode,
   edgePairCounts: Map<string, number>,
 ) {
   context.beginPath();
@@ -512,8 +502,8 @@ function drawEdgePath(
 
 function drawArrowHead(
   context: CanvasRenderingContext2D,
-  source: D3Node,
-  target: D3Node,
+  source: GraphNode,
+  target: GraphNode,
   edgePairCounts: Map<string, number>,
 ) {
   const { x, y, angle } = getArrowHeadGeometry(source, target, edgePairCounts);
@@ -531,7 +521,7 @@ function drawArrowHead(
   context.restore();
 }
 
-function getArrowHeadGeometry(source: D3Node, target: D3Node, edgePairCounts: Map<string, number>) {
+function getArrowHeadGeometry(source: GraphNode, target: GraphNode, edgePairCounts: Map<string, number>) {
   const controlPoint = getEdgeControlPoint(source, target, edgePairCounts);
   let tangentX = target.x - source.x;
   let tangentY = target.y - source.y;
@@ -553,7 +543,7 @@ function getArrowHeadGeometry(source: D3Node, target: D3Node, edgePairCounts: Ma
   };
 }
 
-function getEdgeControlPoint(source: D3Node, target: D3Node, edgePairCounts: Map<string, number>) {
+function getEdgeControlPoint(source: GraphNode, target: GraphNode, edgePairCounts: Map<string, number>) {
   const pairKey = unorderedEdgeKey(source.fqdn, target.fqdn);
   const hasParallelOrReverse = (edgePairCounts.get(pairKey) ?? 0) > 1;
 
@@ -576,24 +566,24 @@ function getEdgeControlPoint(source: D3Node, target: D3Node, edgePairCounts: Map
   };
 }
 
-function isNodeVisible(node: D3Node, visibleNodeIds: Set<string>) {
-  return visibleNodeIds.size === 0 || visibleNodeIds.has(node.fqdn);
+function isNodeVisible(node: GraphNode, visibleNodeIds: Set<string>) {
+  return visibleNodeIds.has(node.fqdn);
 }
 
 function isEdgeVisible(
-  edge: D3Edge,
-  nodes: D3Node[],
+  edge: GraphEdge,
+  nodes: GraphNode[],
   visibleEdgeIds: Set<string>,
   visibleNodeIds: Set<string>,
 ) {
   return (
     isNodeVisible(getNode(nodes, edge.source), visibleNodeIds) &&
     isNodeVisible(getNode(nodes, edge.target), visibleNodeIds) &&
-    (visibleEdgeIds.size === 0 || visibleEdgeIds.has(edge.id))
+    visibleEdgeIds.has(edge.id)
   );
 }
 
-function isEdgeHighlighted(edge: D3Edge, hoveredEdgeIds?: Set<string>) {
+function isEdgeHighlighted(edge: GraphEdge, hoveredEdgeIds?: Set<string>) {
   return hoveredEdgeIds?.has(edge.id) ?? false;
 }
 
@@ -601,7 +591,7 @@ function unorderedEdgeKey(a: string, b: string) {
   return a < b ? `${a}->${b}` : `${b}->${a}`;
 }
 
-function getNodeImportanceScore(node: D3Node, connectionCountByNode: Map<string, number>) {
+function getNodeImportanceScore(node: GraphNode, connectionCountByNode: Map<string, number>) {
   return Math.max(
     node.connection_count ?? 0,
     connectionCountByNode.get(node.fqdn) ?? 0,

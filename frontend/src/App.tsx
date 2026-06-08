@@ -8,8 +8,6 @@ import { nodeColumns, type TableNode } from "@/components/table/node-columns";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import type { GraphSnapshot } from "./features/graph/types";
 import { fetchGraphDelta, fetchGraphSnapshot } from "./api/graph-api";
-import { applyGraphDelta } from "./features/graph/apply-graph-delta";
-import { normalizeGraphSnapshot } from "./features/graph/normalize-graph-snapshot";
 import FilterBar from "./components/FilterBar";
 import { filtersReducer } from "./features/filters/filters-reducer";
 import { applyGraphFilters } from "./features/filters/apply-graph-filters";
@@ -21,6 +19,8 @@ import { ThemeToggle } from "./components/theme-toggle";
 import { readUrlState, writeUrlState, type TableView } from "./features/url-state";
 import NodeDetailsPanel from "./components/NodeDetailsPanel";
 import GraphViewD3 from "./components/GraphViewD3";
+import { normalizeGraphSnapshot } from "./features/graph/normalize-graph-snapshot";
+import { applyGraphDelta } from "./features/graph/apply-graph-delta";
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
 
@@ -110,9 +110,9 @@ export function App() {
 
     const edges = selectedNodeFqdn
       ? connectionSearchedSnapshot.edges.filter(
-          (edge) =>
-            edge.source_fqdn === selectedNodeFqdn || edge.target_fqdn === selectedNodeFqdn,
-        )
+        (edge) =>
+          edge.source_fqdn === selectedNodeFqdn || edge.target_fqdn === selectedNodeFqdn,
+      )
       : connectionSearchedSnapshot.edges;
 
     return edges.map((edge) => ({
@@ -148,12 +148,14 @@ export function App() {
         setError(null);
 
         const data = await fetchGraphSnapshot();
+        console.log("Fetched graph snapshot");
 
         const snapshot = normalizeGraphSnapshot({
           nodes: data.upsert_nodes,
           edges: data.upsert_edges,
           cursor: data.cursor,
         });
+        console.log("Normalized graph snapshot");
 
         setSnapshot(snapshot);
       } catch (error) {
@@ -203,7 +205,8 @@ export function App() {
         setSnapshot((current) => {
           if (!current) return current;
 
-          return applyGraphDelta(current, delta);
+          const newData = applyGraphDelta(current, delta);
+          return newData;
         });
       } catch (error) {
         console.error("Failed to fetch graph delta", error);
@@ -215,11 +218,11 @@ export function App() {
     };
   }, [snapshot]);
 
-  if (isLoading) {
+  const isLoadingDiv = () => {
     return <div className="p-6 text-sm text-muted-foreground">Loading graph...</div>;
   }
 
-  if (error) {
+  const errorDiv = () => {
     return <div className="p-6 text-sm text-destructive">{error}</div>;
   }
   return (
@@ -235,151 +238,163 @@ export function App() {
         </header>
 
         <main className="grid h-[calc(100vh-3.5rem)] grid-rows-2 overflow-hidden">
-          <section className="relative min-h-0 border-b">
-            {snapshot ? (
-              <GraphViewD3
-                edges={snapshot.edges}
-                nodes={snapshot.nodes}
-                visibleEdgeIds={visibleEdgeIds}
-                visibleNodeIds={visibleNodeIds}
-                hoveredEdgeIds={hoveredConnectionIds}
-                hoveredNodeId={hoveredNodeFqdn}
-                selectedNodeId={selectedNodeFqdn}
-                onEdgeHoverChange={(edgeIds) => setHoveredConnectionIds(new Set(edgeIds))}
-                onNodeHoverChange={setHoveredNodeFqdn}
-                onNodeHoverPositionChange={setHoveredNodePosition}
-                onNodeSelect={selectNodeConnections}
-                onStageClick={() => setSelectedNodeFqdn(null)}
-              />
-            ) : (
-              <div className="p-6 text-sm text-muted-foreground">No data to display.</div>
-            )}
-            {contextNode && hoveredNodePosition ? (
-              <div
-                className="pointer-events-none absolute z-20 max-w-[30rem] rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm backdrop-blur"
-                style={{
-                  left: `${hoveredNodePosition.x + 14}px`,
-                  top: `${hoveredNodePosition.y + 14}px`,
-                }}
-              >
-                <div className="mb-1 inline-flex items-center gap-2">
-                  <Badge variant="outline" className="h-5">
-                    Customer
-                  </Badge>
-                  <span className="font-medium">{contextNode.customer.name || "Unknown"}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
-                  <span>Node</span>
-                  <span className="font-mono text-[11px] text-foreground">{contextNode.fqdn}</span>
-                  {contextNode.customer.cmdb_ci_id ? (
-                    <>
-                      <span>CMDB</span>
-                      <span className="font-mono text-[11px] text-foreground">
-                        {contextNode.customer.cmdb_ci_id}
-                      </span>
-                    </>
-                  ) : null}
-                </div>
-                {primaryInterface ? (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
-                    <span>IP</span>
-                    <span className="font-mono text-[11px] text-foreground">{primaryInterface.ip}</span>
-                    <span>Subnet</span>
-                    <span className="font-mono text-[11px] text-foreground">
-                      {primaryInterface.subnet}
-                    </span>
-                    <span>MAC</span>
-                    <span className="font-mono text-[11px] text-foreground">{primaryInterface.mac}</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
+          {error || isLoading ? (
+            <>
+              {error && errorDiv()}
+              {isLoading && isLoadingDiv()}
+            </>
+          ) : (
+            <>
 
-          <section className="flex min-h-0 flex-col overflow-hidden p-4">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <Input
-                  className="h-8 w-56"
-                  placeholder={tableView === "nodes" ? "Search nodes..." : "Search connections..."}
-                  value={globalSearch}
-                  onChange={(event) => setGlobalSearch(event.target.value)}
-                />
-
-                {tableView === "nodes" ? (
-                  <FilterBar
-                    dispatch={dispatchFilters}
-                    filters={filters}
-                    suggestions={filterSuggestions}
+              <section className="relative min-h-0 border-b">
+                {snapshot ? (
+                  <GraphViewD3
+                    graphData={snapshot}
+                    visibleEdgeIds={visibleEdgeIds}
+                    visibleNodeIds={visibleNodeIds}
+                    hoveredEdgeIds={hoveredConnectionIds}
+                    hoveredNodeId={hoveredNodeFqdn}
+                    selectedNodeId={selectedNodeFqdn}
+                    onEdgeHoverChange={(edgeIds) => setHoveredConnectionIds(new Set(edgeIds))}
+                    onNodeHoverChange={setHoveredNodeFqdn}
+                    onNodeHoverPositionChange={setHoveredNodePosition}
+                    onNodeSelect={selectNodeConnections}
+                    onStageClick={() => setSelectedNodeFqdn(null)}
                   />
                 ) : (
-                  <>
-                    <FilterBar
-                      dispatch={dispatchFilters}
-                      filters={filters}
-                      suggestions={filterSuggestions}
-                    />
-                    {selectedNodeFqdn ? (
-                      <div className="inline-flex h-7 items-center gap-2 rounded-md border bg-muted px-2 text-xs">
-                        <span>Connected to {selectedNodeFqdn}</span>
-                        <button
-                          type="button"
-                          aria-label={`Clear selected node ${selectedNodeFqdn}`}
-                          className="rounded-sm p-0.5 hover:bg-background/70"
-                          onClick={() => setSelectedNodeFqdn(null)}
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </div>
-                    ) : null}
-                  </>
+                  <div className="p-6 text-sm text-muted-foreground">No data to display.</div>
                 )}
-              </div>
+                {contextNode && hoveredNodePosition ? (
+                  <div
+                    className="pointer-events-none absolute z-20 max-w-[30rem] rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm backdrop-blur"
+                    style={{
+                      left: `${hoveredNodePosition.x + 14}px`,
+                      top: `${hoveredNodePosition.y + 14}px`,
+                    }}
+                  >
+                    <div className="mb-1 inline-flex items-center gap-2">
+                      <Badge variant="outline" className="h-5">
+                        Owner
+                      </Badge>
+                      <span className="font-medium">{contextNode.customer.name || "Unknown"}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                      <span>Node</span>
+                      <span className="font-mono text-[11px] text-foreground">{contextNode.fqdn}</span>
+                      {contextNode.customer.cmdb_ci_id ? (
+                        <>
+                          <span>CmdbCiId</span>
+                          <span className="font-mono text-[11px] text-foreground">
+                            {contextNode.customer.cmdb_ci_id}
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                      {contextNode.interfaces.map((intf) => (
+                      
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                        <span>IP</span>
+                        <span className="font-mono text-[11px] text-foreground">{intf.ip}</span>
+                        <span>Subnet</span>
+                        <span className="font-mono text-[11px] text-foreground">
+                          {intf.subnet}
+                        </span>
+                        <span>MAC</span>
+                        <span className="font-mono text-[11px] text-foreground">{intf.mac}</span>
+                      </div>
+                      ))}
 
-              <div className="ml-auto flex shrink-0 rounded-md border p-0.5">
-                <Button
-                  variant={tableView === "nodes" ? "default" : "ghost"}
-                  size="sm"
-                  className="h-7"
-                  onClick={() => setTableView("nodes")}
-                >
-                  Nodes
-                </Button>
-                <Button
-                  variant={tableView === "connections" ? "default" : "ghost"}
-                  size="sm"
-                  className="h-7"
-                  onClick={() => setTableView("connections")}
-                >
-                  Connections
-                </Button>
-              </div>
-            </div>
-            {tableView === "nodes" ? (
-              selectedNode ? (
-                <NodeDetailsPanel
-                  node={selectedNode}
-                  onBack={() => setSelectedNodeFqdn(null)}
-                />
-              ) : (
-                <DataTable
-                  columns={nodeColumns}
-                  data={tableNodes}
-                  getRowHoverId={(row) => row.fqdn}
-                  hoveredRowId={hoveredNodeFqdn}
-                  onRowHoverChange={setHoveredNodeFqdn}
-                />
-              )
-            ) : (
-              <DataTable
-                columns={connectionColumns}
-                data={tableConnections}
-                getRowHoverId={(row) => row.id}
-                hoveredRowIds={hoveredConnectionIds}
-                onRowHoverChange={setHoveredConnectionId}
-              />
-            )}
-          </section>
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="flex min-h-0 flex-col overflow-hidden p-4">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                    <Input
+                      className="h-8 w-56"
+                      placeholder={tableView === "nodes" ? "Search nodes..." : "Search connections..."}
+                      value={globalSearch}
+                      onChange={(event) => setGlobalSearch(event.target.value)}
+                    />
+
+                    {tableView === "nodes" ? (
+                      <FilterBar
+                        dispatch={dispatchFilters}
+                        filters={filters}
+                        suggestions={filterSuggestions}
+                      />
+                    ) : (
+                      <>
+                        <FilterBar
+                          dispatch={dispatchFilters}
+                          filters={filters}
+                          suggestions={filterSuggestions}
+                        />
+                        {selectedNodeFqdn ? (
+                          <div className="inline-flex h-7 items-center gap-2 rounded-md border bg-muted px-2 text-xs">
+                            <span>Connected to {selectedNodeFqdn}</span>
+                            <button
+                              type="button"
+                              aria-label={`Clear selected node ${selectedNodeFqdn}`}
+                              className="rounded-sm p-0.5 hover:bg-background/70"
+                              onClick={() => setSelectedNodeFqdn(null)}
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="ml-auto flex shrink-0 rounded-md border p-0.5">
+                    <Button
+                      variant={tableView === "nodes" ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7"
+                      onClick={() => setTableView("nodes")}
+                    >
+                      Nodes
+                    </Button>
+                    <Button
+                      variant={tableView === "connections" ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7"
+                      onClick={() => setTableView("connections")}
+                    >
+                      Connections
+                    </Button>
+                  </div>
+                </div>
+                {tableView === "nodes" ? (
+                  selectedNode ? (
+                    <NodeDetailsPanel
+                      node={selectedNode}
+                      onBack={() => setSelectedNodeFqdn(null)}
+                    />
+                  ) : (
+                    <DataTable
+                      columns={nodeColumns}
+                      data={tableNodes}
+                      getRowHoverId={(row) => row.fqdn}
+                      hoveredRowId={hoveredNodeFqdn}
+                      onRowHoverChange={setHoveredNodeFqdn}
+                    />
+                  )
+                ) : (
+                  <DataTable
+                    columns={connectionColumns}
+                    data={tableConnections}
+                    getRowHoverId={(row) => row.id}
+                    hoveredRowIds={hoveredConnectionIds}
+                    onRowHoverChange={setHoveredConnectionId}
+                  />
+                )}
+              </section>
+
+            </>
+          )}
         </main>
       </SidebarInset>
     </SidebarProvider>

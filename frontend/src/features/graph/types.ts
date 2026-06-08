@@ -1,3 +1,6 @@
+
+import * as d3 from "d3";
+
 export type Customer = {
   name: string;
   cmdb_ci_id: string;
@@ -10,7 +13,7 @@ export type NetInterface = {
   mac: string;
   subnet: string;
 };
-export type GraphNode = {
+export type GraphNode = d3.SimulationNodeDatum & {
   id: string;
   fqdn: string;
   hostname: string;
@@ -21,6 +24,10 @@ export type GraphNode = {
   first_seen: string;
   last_seen: string;
   is_placeholder?: boolean;
+  x: number;
+  y: number;
+  fx: number | null;
+  fy: number | null;
 };
 
 export type GraphEdge = {
@@ -43,7 +50,7 @@ export type GraphEdge = {
   seen_count: number;
   last_seen: string;
   first_seen: string;
-};
+} & d3.SimulationLinkDatum<GraphNode>;
 
 export type GraphCursor = {
   last_seen: string;
@@ -64,3 +71,7 @@ export type GraphDelta = {
   remove_node_ids: string[];
   remove_edge_ids: string[];
 };
+
+
+
+

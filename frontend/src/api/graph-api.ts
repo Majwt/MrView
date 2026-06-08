@@ -8,7 +8,7 @@ export function fetchGraphSnapshot(): Promise<GraphDelta> {
 export function fetchGraphDelta(cursor: GraphCursor): Promise<GraphDelta> {
   console.log("fetching graph delta with cursor:", cursor);
   const params = new URLSearchParams({
-    lastSeen: cursor.last_seen,
+    lastSeen: String(cursor.last_seen),
     lastEdgeId: String(cursor.last_seen_edge_id),
     lastNodeId: String(cursor.last_seen_node_id),
   });

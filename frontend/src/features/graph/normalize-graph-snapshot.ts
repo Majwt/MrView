@@ -20,6 +20,11 @@ export function normalizeGraphSnapshot(snapshot: GraphSnapshot): GraphSnapshot {
     addMissingEndpoint(placeholdersByFqdn, nodesByFqdn, edge, edge.target_fqdn, edge.target_ip);
   }
 
+  for (const edge of snapshot.edges) {
+    edge.source = edge.source_fqdn;
+    edge.target = edge.target_fqdn;
+  }
+
   return {
     ...snapshot,
     edges,
@@ -174,7 +179,7 @@ function toPlaceholderNode(placeholder: PlaceholderNodeDraft): GraphNode {
   return {
     id: `edge:${placeholder.fqdn}`,
     fqdn: placeholder.fqdn,
-    hostname: getHostname(placeholder.fqdn),
+    hostname: isIpv4(placeholder.fqdn) ? placeholder.fqdn : getHostname(placeholder.fqdn),
     interfaces: [...placeholder.interfacesByIp.values()],
     distinct_edge: placeholder.edgeIds.size,
     connection_count: placeholder.connectionCount,
@@ -186,6 +191,10 @@ function toPlaceholderNode(placeholder: PlaceholderNodeDraft): GraphNode {
     first_seen: placeholder.firstSeen,
     last_seen: placeholder.lastSeen,
     is_placeholder: true,
+    x: Math.random() * 1000,
+    y: Math.random() * 1000,
+    fx: null,
+    fy: null,
   };
 }
 

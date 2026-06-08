@@ -1,24 +1,20 @@
-import type { GraphEdge, GraphNode } from "@/features/graph/types";
+import type { GraphEdge, GraphNode, GraphSnapshot } from "@/features/graph/types";
 import * as d3 from "d3";
 import { useEffect, useRef } from "react";
 import {
   buildEdgeMetadata,
   buildLabelZoomThresholds,
-  createD3Edges,
-  createD3Nodes,
+  createGraphEdges,
   edgeConnectionIds,
   edgesConnectedTo,
   findVisibleNodeAt,
   getFocusState,
   renderGraph,
   type CanvasDragSubject,
-  type D3Edge,
-  type D3Node,
 } from "@/features/graph/build-d3-graph";
 
 type Props = {
-  edges: GraphEdge[];
-  nodes: GraphNode[];
+  graphData: GraphSnapshot | null;
   visibleNodeIds: Set<string>;
   visibleEdgeIds: Set<string>;
   hoveredNodeId?: string | null;
@@ -32,8 +28,7 @@ type Props = {
 };
 
 export default function GraphViewD3({
-  nodes: allNodes,
-  edges: allEdges,
+  graphData,
   visibleEdgeIds,
   visibleNodeIds,
   hoveredNodeId,
@@ -46,7 +41,13 @@ export default function GraphViewD3({
   onStageClick,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const requestRenderRef = useRef<() => void>(() => {});
+  const requestRenderRef = useRef<() => void>(() => { });
+  const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
+  const nodesRef = useRef<GraphNode[]>([]);
+  const edgesRef = useRef<GraphEdge[]>([]);
+  const edgePairCountsRef = useRef<Map<string, number>>(new Map());
+  const labelZoomThresholdsRef = useRef<Map<string, number>>(new Map());
+  const topologySignatureRef = useRef({ nodes: "", edges: "" });
   const latestRef = useRef({
     visibleNodeIds,
     visibleEdgeIds,
@@ -76,6 +77,7 @@ export default function GraphViewD3({
     requestRenderRef.current();
   });
 
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -89,22 +91,15 @@ export default function GraphViewD3({
     let width = 1;
     let height = 1;
     let transform = d3.zoomIdentity;
-    let hoveredNode: D3Node | null = null;
+    let hoveredNode: GraphNode | null = null;
     let pendingFrame = 0;
 
-    const nodes = createD3Nodes(allNodes);
-    const nodeIds = new Set(nodes.map((node) => node.fqdn));
-    const edges = createD3Edges(allEdges, nodeIds);
-    const { connectionCountByNode, edgePairCounts } = buildEdgeMetadata(edges);
-
-    const labelZoomThresholds = buildLabelZoomThresholds(nodes, connectionCountByNode);
-
     const simulation = d3
-      .forceSimulation<D3Node>(nodes)
+      .forceSimulation<GraphNode, GraphEdge>(nodesRef.current)
       .force(
         "link",
         d3
-          .forceLink<D3Node, D3Edge>(edges)
+          .forceLink<GraphNode, GraphEdge>(edgesRef.current)
           .id((node) => node.fqdn)
           .distance(55),
       )
@@ -113,6 +108,8 @@ export default function GraphViewD3({
       .force("x", d3.forceX(width / 2).strength(0.04))
       .force("y", d3.forceY(height / 2).strength(0.04))
       .on("tick", requestRender);
+
+    simulationRef.current = simulation;
 
     const zoom = d3
       .zoom<HTMLCanvasElement, unknown>()
@@ -169,7 +166,9 @@ export default function GraphViewD3({
           hoveredNode = node;
           latestRef.current.onNodeHoverChange?.(node?.fqdn ?? null);
           latestRef.current.onEdgeHoverChange?.(
-            node ? edgesConnectedTo(edges, nodes, node).flatMap(edgeConnectionIds) : [],
+            node
+              ? edgesConnectedTo(edgesRef.current, nodesRef.current, node).flatMap(edgeConnectionIds)
+              : [],
           );
         }
 
@@ -206,13 +205,14 @@ export default function GraphViewD3({
     resizeCanvas();
 
     return () => {
-      requestRenderRef.current = () => {};
+      requestRenderRef.current = () => { };
       cancelAnimationFrame(pendingFrame);
       canvasSelection.on(".zoom", null);
       canvasSelection.on(".drag", null);
       canvasSelection.on(".graph", null);
       resizeObserver.disconnect();
       simulation.stop();
+      simulationRef.current = null;
     };
 
     function resizeCanvas() {
@@ -251,6 +251,8 @@ export default function GraphViewD3({
       const labelBackground = styles.getPropertyValue("--background").trim() || "#ffffff";
 
       if (!context) return;
+      const nodes = nodesRef.current;
+      const edges = edgesRef.current;
       const focus = getFocusState({
         edges,
         hoveredEdgeIds: latestRef.current.hoveredEdgeIds,
@@ -264,7 +266,7 @@ export default function GraphViewD3({
 
       renderGraph({
         context,
-        edgePairCounts,
+        edgePairCounts: edgePairCountsRef.current,
         edges,
         focus,
         height,
@@ -272,7 +274,7 @@ export default function GraphViewD3({
         hoveredNode,
         hoveredNodeId: latestRef.current.hoveredNodeId,
         labelBackground,
-        labelZoomThresholds,
+        labelZoomThresholds: labelZoomThresholdsRef.current,
         nodes,
         pixelRatio,
         selectedNodeId: latestRef.current.selectedNodeId,
@@ -292,7 +294,69 @@ export default function GraphViewD3({
         visibleNodeIds: latestRef.current.visibleNodeIds,
       });
     }
-  }, [allEdges, allNodes]);
+  }, []);
+
+  useEffect(() => {
+    if (!graphData) {
+      nodesRef.current = [];
+      edgesRef.current = [];
+      edgePairCountsRef.current = new Map();
+      labelZoomThresholdsRef.current = new Map();
+      topologySignatureRef.current = { nodes: "", edges: "" };
+      simulationRef.current?.nodes(nodesRef.current);
+      const linkForce = simulationRef.current?.force<d3.ForceLink<GraphNode, GraphEdge>>("link");
+      linkForce?.links(edgesRef.current);
+      requestRenderRef.current();
+      return;
+    }
+
+    const existingNodes = new Map(nodesRef.current.map((node) => [node.fqdn, node]));
+    const nextNodes = graphData.nodes.map((nextNode) => {
+      const existingNode = existingNodes.get(nextNode.fqdn);
+
+      if (!existingNode) {
+        return { ...nextNode };
+      }
+
+      const { x, y, vx, vy, fx, fy } = existingNode;
+      Object.assign(existingNode, nextNode, { x, y, vx, vy, fx, fy });
+
+      return existingNode;
+    });
+
+    const nodeIds = new Set(nextNodes.map((node) => node.fqdn));
+    const nextEdges = createGraphEdges(graphData.edges, nodeIds);
+    const { connectionCountByNode, edgePairCounts } = buildEdgeMetadata(nextEdges);
+    const nextTopologySignature = {
+      nodes: [...nodeIds].sort().join("\n"),
+      edges: nextEdges.map((edge) => edge.id).sort().join("\n"),
+    };
+    const topologyChanged =
+      nextTopologySignature.nodes !== topologySignatureRef.current.nodes ||
+      nextTopologySignature.edges !== topologySignatureRef.current.edges;
+
+    nodesRef.current = nextNodes;
+    edgesRef.current = nextEdges;
+    edgePairCountsRef.current = edgePairCounts;
+    labelZoomThresholdsRef.current = buildLabelZoomThresholds(nextNodes, connectionCountByNode);
+    topologySignatureRef.current = nextTopologySignature;
+
+    const simulation = simulationRef.current;
+    if (!simulation) {
+      requestRenderRef.current();
+      return;
+    }
+
+    simulation.nodes(nodesRef.current);
+    const linkForce = simulation.force<d3.ForceLink<GraphNode, GraphEdge>>("link");
+    linkForce?.links(edgesRef.current);
+
+    if (topologyChanged) {
+      simulation.alpha(Math.max(simulation.alpha(), 0.08)).restart();
+    }
+    requestRenderRef.current();
+  }, [graphData]);
+
 
   return (
     <canvas
