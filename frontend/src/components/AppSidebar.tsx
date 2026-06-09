@@ -28,52 +28,30 @@ const version = () => {
   return "v" + import.meta.env.VITE_APP_VERSION || `v unknown (${git.commit}${dirty})`;
 }
 
-type sidebarLink = {
+export type sidebarLink = {
   title: string;
   icon: React.ComponentType;
   active?: boolean;
   onClick?: () => void;
 };
 
-type sidebarSection = {
+export type sidebarSection = {
   title: string;
   content: sidebarLink[];
 }
 
 
-const sections: sidebarSection[] = [
-  {
-    title: "Graphs",
-    content: [
-      {
-        title: "Complete Graph",
-        icon: Network,
-        active: true,
-        onClick: () => {
-          alert("Complete Graph clicked");
-        }
-      },
-      {
-        title: "Customer Graphs",
-        icon: Users,
-        onClick: () => {
-        }
-      },
-    ],
-  },
-  {
-    title: "Other things",
-    content: [
-      {
-        title: "Settings",
-        icon: Settings,
-      }
-    ],
-  }
-];
 
 
-export function AppSidebar() {
+export type Props = {
+  Sections: sidebarSection[];
+}
+
+
+
+export function AppSidebar({ Sections }: Props) {
+
+
   return (
     <Sidebar>
       <SidebarHeader>
@@ -89,7 +67,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {sections.map((section) => (
+        {Sections.map((section) => (
           <SidebarGroup key={section.title}>
             <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
             <SidebarGroupContent>

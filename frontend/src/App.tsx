@@ -1,5 +1,5 @@
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
-import { AppSidebar } from "./components/AppSidebar";
+import { AppSidebar, type sidebarSection } from "./components/AppSidebar";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { DataTable } from "@/components/table/data-table";
@@ -14,7 +14,7 @@ import { applyGraphFilters } from "./features/filters/apply-graph-filters";
 import { buildFilterSuggestions } from "./features/filters/filter-suggestions";
 import { applyGlobalSearch } from "./features/filters/apply-global-search";
 import { Badge } from "./components/ui/badge";
-import { X } from "lucide-react";
+import { Network, Settings, Users, X } from "lucide-react";
 import { ThemeToggle } from "./components/theme-toggle";
 import { readUrlState, writeUrlState, type TableView } from "./features/url-state";
 import NodeDetailsPanel from "./components/NodeDetailsPanel";
@@ -81,7 +81,6 @@ export function App() {
   const selectedNode = selectedNodeFqdn ? nodesByFqdn.get(selectedNodeFqdn) : undefined;
   const contextNodeFqdn = hoveredNodeFqdn ?? selectedNodeFqdn;
   const contextNode = contextNodeFqdn ? nodesByFqdn.get(contextNodeFqdn) : undefined;
-  const primaryInterface = contextNode?.interfaces[0];
 
   const tableNodes: TableNode[] = useMemo(() => {
     if (nodeSearchedSnapshot == null) return [];
@@ -225,9 +224,43 @@ export function App() {
   const errorDiv = () => {
     return <div className="p-6 text-sm text-destructive">{error}</div>;
   }
+
+
+  const sidebarSections: sidebarSection[] = [
+    {
+      title: "Graphs",
+      content: [
+        {
+          title: "Complete Graph",
+          icon: Network,
+          active: true,
+          onClick: () => {
+            alert("Complete Graph clicked");
+          }
+        },
+        {
+          title: "Customer Graphs",
+          icon: Users,
+          onClick: () => {
+          }
+        },
+      ],
+    },
+    {
+      title: "Other things",
+      content: [
+        {
+          title: "Settings",
+          icon: Settings,
+        }
+      ],
+    }
+  ];
+
+
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar Sections={sidebarSections} />
 
       <SidebarInset>
         <header className="flex h-14 justify-between items-center gap-2 border-b px-4">
@@ -266,7 +299,7 @@ export function App() {
                 )}
                 {contextNode && hoveredNodePosition ? (
                   <div
-                    className="pointer-events-none absolute z-20 max-w-[30rem] rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm backdrop-blur"
+                    className="pointer-events-none absolute z-20 max-w-120 rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm backdrop-blur"
                     style={{
                       left: `${hoveredNodePosition.x + 14}px`,
                       top: `${hoveredNodePosition.y + 14}px`,
