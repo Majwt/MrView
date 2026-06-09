@@ -39,6 +39,9 @@ public class Db
         endpoint_a,
         endpoint_b,
 
+        endpoint_a_customer_id,
+        endpoint_b_customer_id,
+
         service_fqdn,
         service_port,
         service_name,
@@ -102,7 +105,7 @@ public class Db
         }
     }
 
-    public async Task<IEnumerable<EdgeEntity>>  getCustomerEdges(GraphCursor cursor, int customerId)
+    public async Task<IEnumerable<EdgeEntity>>  getCustomerEdgesAsync(GraphCursor cursor, int customerId)
     {
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
@@ -112,7 +115,10 @@ public class Db
               {_edgesColumns}
             FROM {_edgesTable}
             WHERE seen_count > @SeenCountThreshold
-                AND CustomerID = @CustomerId
+                AND (
+                        endpoint_a_customer_id = @CustomerId
+                        OR endpoint_b_customer_id = @CustomerId
+                )
                 AND (
                     last_seen > @LastSeen
                     OR (
@@ -329,6 +335,7 @@ public class Db
 
 
         await using var command = new SqlCommand(sql, connection);
+        _logger.LogInformation("CustomerId: {customerId}", customerId);
         command.Parameters.AddWithValue("@CustomerId", customerId);
         command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
         {
@@ -412,5 +419,39 @@ public class Db
             nodes.Add(node);
         }
         return nodes;
+    }
+
+    internal async Task<Customer[]> getAllCustomersAsync()
+    {
+
+        using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        using var command = new SqlCommand($"SELECT distinct CustomerID, CmdbCiId, Customer FROM {_nodesTable}", connection);
+
+        using var reader = await command.ExecuteReaderAsync();
+
+        var customeridOrdinal = reader.GetOrdinal("CustomerID");
+        var customerOrdinal = reader.GetOrdinal("Customer");
+        var cmdbCiIdOrdinal = reader.GetOrdinal("CmdbCiId");
+
+        var customers = new List<Customer>();
+
+        while (await reader.ReadAsync())
+        {
+            var customerId = reader.GetInt32(customeridOrdinal);
+            if (customerId == 0)
+            {
+                continue;
+            }
+            var customerName = reader.GetString(customerOrdinal);
+            var cmdbCiId = reader.GetString(cmdbCiIdOrdinal);
+
+
+            customers.Add(new Customer(Name: customerName, CmdbCiId: cmdbCiId, Id: customerId));
+
+        }
+
+        return customers.ToArray();
     }
 }

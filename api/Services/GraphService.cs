@@ -26,8 +26,19 @@ public class GraphService
 
     public async Task<GraphResponse> GetGraphAsync(GraphCursor cursor, int customerId = -1)
     {
-        var dbEdgesTask = db.getEdgesAsync(cursor);
-        var dbNodesTask = db.getNodesAsync(cursor);
+
+        Task<IEnumerable<EdgeEntity>> dbEdgesTask;
+        Task<IEnumerable<NodeEntity>> dbNodesTask;
+        if (customerId == -1)
+        {
+            dbEdgesTask = db.getEdgesAsync(cursor);
+            dbNodesTask = db.getNodesAsync(cursor);
+        }
+        else
+        {
+            dbEdgesTask = db.getCustomerEdgesAsync(cursor, customerId);
+            dbNodesTask = db.getCustomerNodesAsync(cursor, customerId);
+        }
 
         await Task.WhenAll(dbEdgesTask, dbNodesTask);
         var dbNodes = dbNodesTask.Result;

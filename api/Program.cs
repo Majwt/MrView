@@ -16,7 +16,6 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 builder.Configuration.AddEnvironmentVariables();
 
-
 builder
     .Services.AddOptions<DatabaseOptions>()
     .Bind(builder.Configuration.GetSection("Database"))
@@ -32,10 +31,15 @@ builder
     .ValidateOnStart();
 
 builder.Services.AddScoped<GraphService>();
+builder.Services.AddScoped<CustomerService>();
 builder.Services.AddScoped<Db>();
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+
+builder.Services.AddHealthChecks();
+
+builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
@@ -48,21 +52,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.Logger.LogInformation("Starting API v{0}", typeof(Program).Assembly.GetName().Version);
 
-app.MapGet(
-    "/",
-    () =>
-        Results.Ok(
-            new { status = "ok", version = $"v{typeof(Program).Assembly.GetName().Version}" }
-        )
-);
-
-app.MapGet(
-    "/api/health",
-    () =>
-        Results.Ok(
-            new { status = "ok", version = $"v{typeof(Program).Assembly.GetName().Version}" }
-        )
-);
+app.MapHealthChecks("/api/healthz");
+app.MapHealthChecks("/");
 
 // Layout:
 
@@ -71,12 +62,13 @@ app.MapGet(
 //
 // /api/customer/{id}/graph - returns the full graph snapshot for a specific customer with cursor
 // /api/customer/{id}/graph?lastSeen={timestamp}&lastEdgeId={id}&lastNodeId={id} - returns the graph delta for a specific customer since the provided cursor
+//
+// /api/customers - All customers in a list with ids and names, so the client can know which customer ids to use for the above endpoints
 
 app.MapGet(
     "/api/graph",
     async (string? lastSeen, long? lastEdgeId, long? lastNodeId, GraphService graphService) =>
     {
-
         var correct = DateTimeOffset.TryParse(lastSeen, out DateTimeOffset parsedLastSeen);
         if (!correct)
         {
@@ -87,16 +79,39 @@ app.MapGet(
             );
         }
 
-
-        var cursor = new GraphCursor(
-            parsedLastSeen,
-            lastEdgeId ?? 0,
-            lastNodeId ?? 0
-        );
-
+        var cursor = new GraphCursor(parsedLastSeen, lastEdgeId ?? 0, lastNodeId ?? 0);
 
         return await graphService.GetGraphAsync(cursor);
     }
+);
+
+app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? lastSeen, long? lastEdgeId, long? lastNodeId, GraphService graphService) =>
+{
+    var correct = DateTimeOffset.TryParse(lastSeen, out DateTimeOffset parsedLastSeen);
+    if (!correct)
+    {
+        parsedLastSeen = DateTimeOffset.UnixEpoch;
+        app.Logger.LogWarning(
+            "Invalid lastSeen value: {0}. Defaulting to UnixEpoch.",
+            lastSeen
+        );
+    }
+
+    var cursor = new GraphCursor(parsedLastSeen, lastEdgeId ?? 0, lastNodeId ?? 0);
+    app.Logger.LogInformation(
+        "Received request for customer {0} with cursor: lastSeen={1}, lastEdgeId={2}, lastNodeId={3}",
+        customerId,
+        parsedLastSeen,
+        lastEdgeId ?? 0,
+        lastNodeId ?? 0
+    );
+
+    return await graphService.GetGraphAsync(cursor, customerId);
+});
+
+app.MapGet(
+    "/api/customers",
+    async (CustomerService customerService) => await customerService.GetCustomerAsync()
 );
 
 try

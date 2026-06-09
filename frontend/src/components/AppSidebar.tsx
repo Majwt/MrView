@@ -14,6 +14,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { NavLink } from "react-router";
+import { useNavigate } from "react-router";
+import { Command, CommandEmpty, CommandInput, CommandList } from "./ui/command";
+import { useEffect, useState } from "react";
+import SidebarCustomerSelect from "./SideBarCustomerSelect";
 
 // YYYY-MM-DDTHH:mm:ssZ+-HH:mm
 
@@ -33,6 +38,7 @@ export type sidebarLink = {
   icon: React.ComponentType;
   active?: boolean;
   onClick?: () => void;
+  page: string;
 };
 
 export type sidebarSection = {
@@ -41,15 +47,9 @@ export type sidebarSection = {
 }
 
 
+export function AppSidebar() {
 
 
-export type Props = {
-  Sections: sidebarSection[];
-}
-
-
-
-export function AppSidebar({ Sections }: Props) {
 
 
   return (
@@ -67,23 +67,30 @@ export function AppSidebar({ Sections }: Props) {
       </SidebarHeader>
 
       <SidebarContent>
-        {Sections.map((section) => (
-          <SidebarGroup key={section.title}>
-            <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {section.content.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton isActive={item.active} onClick={item.onClick}>
-                      <item.icon />
-                      <span>{item.title}</span>
+        <SidebarGroup>
+          <SidebarGroupLabel>Home</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <NavLink to="/graph">
+                  {({ isActive }) => (
+
+                    <SidebarMenuButton isActive={isActive}>
+                      <Network />
+                      Complete Graph
                     </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+
+                  )}
+                </NavLink>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarCustomerSelect />
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+
+
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>
