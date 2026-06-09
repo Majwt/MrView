@@ -25,7 +25,7 @@ const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
 
 export default function GraphPage() {
 
-  const {customerId} = useParams();
+  const { customerId } = useParams();
 
 
   const [initialUrlState] = useState(readUrlState);
@@ -218,7 +218,7 @@ export default function GraphPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [snapshot]);
+  }, [customerId, snapshot]);
 
   const isLoadingDiv = () => {
     return <div className="p-6 text-sm text-muted-foreground">Loading graph...</div>;
@@ -265,10 +265,8 @@ export default function GraphPage() {
                 }}
               >
                 <div className="mb-1 inline-flex items-center gap-2">
-                  <Badge variant="outline" className="h-5">
-                    Owner
-                  </Badge>
-                  <span className="font-medium">{contextNode.customer.name || "Unknown"}</span>
+
+                  <span className="border-2 rounded-md p-1 font-medium">{contextNode.customer.name || "Unknown"}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
                   <span>Node</span>
@@ -284,15 +282,23 @@ export default function GraphPage() {
                 </div>
                 {contextNode.interfaces.map((intf) => (
 
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                  <div key={intf.ip} className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
                     <span>IP</span>
                     <span className="font-mono text-[11px] text-foreground">{intf.ip}</span>
-                    <span>Subnet</span>
-                    <span className="font-mono text-[11px] text-foreground">
-                      {intf.subnet}
-                    </span>
-                    <span>MAC</span>
-                    <span className="font-mono text-[11px] text-foreground">{intf.mac}</span>
+                    {intf.subnet && (
+                      <>
+                        <span>Subnet</span>
+                        <span className="font-mono text-[11px] text-foreground">
+                          {intf.subnet}
+                        </span>
+                      </>
+                    )}
+                    {intf.mac && (
+                      <>
+                        <span>MAC</span>
+                        <span className="font-mono text-[11px] text-foreground">{intf.mac}</span>
+                      </>
+                    )}
                   </div>
                 ))}
 

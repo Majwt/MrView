@@ -20,7 +20,7 @@ export const NODE_HIT_RADIUS = 20;
 
 const EDGE_WIDTH = 0.2;
 const ARROW_HEAD_LENGTH = 3;
-const ARROW_HEAD_WIDTH = 3;
+const ARROW_HEAD_WIDTH = 2;
 const LABEL_FONT_SIZE = 12;
 const LABEL_STROKE_WIDTH = 4;
 const LABEL_NODE_GAP = 10;
@@ -80,7 +80,7 @@ export function buildEdgeMetadata(edges: GraphEdge[]): EdgeMetadata {
   const connectionCountByNode = new Map<string, number>();
 
   for (const edge of edges) {
-    const key = unorderedEdgeKey(edge.source_fqdn, edge.target_fqdn);
+    const key = ToEdgeKey(edge.source_fqdn, edge.target_fqdn);
     const seenCount = Math.max(edge.seen_count ?? 1, 1);
 
     edgePairCounts.set(key, (edgePairCounts.get(key) ?? 0) + 1);
@@ -534,7 +534,7 @@ function getArrowHeadGeometry(source: GraphNode, target: GraphNode, edgePairCoun
   const tangentLength = Math.hypot(tangentX, tangentY) || 1;
   const unitX = tangentX / tangentLength;
   const unitY = tangentY / tangentLength;
-  const tipOffset = NODE_RADIUS + 1;
+  const tipOffset = NODE_RADIUS;
 
   return {
     x: target.x - unitX * tipOffset,
@@ -544,10 +544,9 @@ function getArrowHeadGeometry(source: GraphNode, target: GraphNode, edgePairCoun
 }
 
 function getEdgeControlPoint(source: GraphNode, target: GraphNode, edgePairCounts: Map<string, number>) {
-  const pairKey = unorderedEdgeKey(source.fqdn, target.fqdn);
-  const hasParallelOrReverse = (edgePairCounts.get(pairKey) ?? 0) > 1;
-
-  if (!hasParallelOrReverse) {
+  const pairKey = ToEdgeKey(source.fqdn, target.fqdn);
+  const reverse_pairKey = ToEdgeKey(target.fqdn, source.fqdn);
+  if ((edgePairCounts.get(reverse_pairKey) ?? 0) < 1 || (edgePairCounts.get(pairKey) ?? 0) < 1) {
     return null;
   }
 
@@ -587,8 +586,8 @@ function isEdgeHighlighted(edge: GraphEdge, hoveredEdgeIds?: Set<string>) {
   return hoveredEdgeIds?.has(edge.id) ?? false;
 }
 
-function unorderedEdgeKey(a: string, b: string) {
-  return a < b ? `${a}->${b}` : `${b}->${a}`;
+function ToEdgeKey(a: string, b: string) {
+  return `${a}->${b}`;
 }
 
 function getNodeImportanceScore(node: GraphNode, connectionCountByNode: Map<string, number>) {

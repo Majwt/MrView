@@ -51,7 +51,7 @@ export default function NodeDetailsPanel({
             Activity
           </h3>
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
-            <DetailItem label="# Distinct Edges">
+            <DetailItem label="# Distinct connections">
               <NumericCell value={node.distinct_edge} emphasize />
             </DetailItem>
             <DetailItem label="# Connections">

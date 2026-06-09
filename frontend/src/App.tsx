@@ -10,50 +10,6 @@ import { useNavigate } from "react-router";
 
 export function App() {
 
-  const navigate = useNavigate();
-
-
-  const sidebarSections: sidebarSection[] = [
-    {
-      title: "Graphs",
-      content: [
-        {
-          title: "Complete Graph",
-          icon: Network,
-          onClick: () => {
-            navigate("/graph");
-
-          },
-          page: "/graph"
-        },
-        {
-          title: "Customer Graphs",
-          icon: Users,
-          onClick: () => {
-            navigate("/graph/1");
-          },
-          page: "/graph/:customerId"
-        },
-      ],
-    },
-    {
-      title: "Other things",
-      content: [
-        {
-          title: "Settings",
-          icon: Settings,
-          onClick: () => {
-            navigate("/settings");
-          },
-          page: "/settings"
-        }
-      ],
-    }
-  ];
-
-
-
-
 
 
   return (
