@@ -1,10 +1,8 @@
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
-import { AppSidebar, type sidebarSection } from "./components/AppSidebar";
-import { Network, Settings, Users } from "lucide-react";
+import { AppSidebar } from "./components/AppSidebar";
 import { ThemeToggle } from "./components/theme-toggle";
 import { Outlet } from "react-router";
 
-import { useNavigate } from "react-router";
 
 
 

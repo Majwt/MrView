@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import { BrowserRouter, Route, Router, Routes } from "react-router";
+import { BrowserRouter, Route, Routes } from "react-router";
 import App from "./App";
 import "./index.css";
 
@@ -21,14 +21,6 @@ const settingsPage = () => {
   )
 }
 
-const test = () => {
-
-  return (
-    <div>
-      <h1 className="text-2xl font-bold">Test</h1>
-    </div>
-  )
-}
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

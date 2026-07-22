@@ -7,7 +7,7 @@ import { applyGraphDelta } from "@/features/graph/apply-graph-delta";
 import { normalizeGraphSnapshot } from "@/features/graph/normalize-graph-snapshot";
 import type { GraphSnapshot } from "@/features/graph/types";
 import { readUrlState, type TableView, writeUrlState } from "@/features/url-state";
-import { Badge, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import FilterBar from "./FilterBar";
 import GraphViewD3 from "./GraphViewD3";

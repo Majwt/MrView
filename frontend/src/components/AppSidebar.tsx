@@ -1,6 +1,6 @@
 // src/components/AppSidebar.tsx
 
-import { HeartPulse, Network, Settings, Users } from "lucide-react";
+import {  Network  } from "lucide-react";
 
 import {
   Sidebar,
@@ -15,12 +15,9 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { NavLink } from "react-router";
-import { useNavigate } from "react-router";
-import { Command, CommandEmpty, CommandInput, CommandList } from "./ui/command";
 import { useEffect, useState, type ReactElement } from "react";
 import SidebarCustomerSelect from "./SideBarCustomerSelect";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "./ui/item";
-import { Button } from "./ui/button";
+import { Item, ItemContent, ItemTitle } from "./ui/item";
 import { fetchStatus } from "@/api/status-api";
 
 // YYYY-MM-DDTHH:mm:ssZ+-HH:mm
