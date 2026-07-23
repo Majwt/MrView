@@ -15,18 +15,18 @@ CREATE TABLE dbo.connections (
     Direction nvarchar(20) NOT NULL,
 
     LocalFqdn nvarchar(255) NULL,
-    LocalAddressIPv4 varchar(45) NOT NULL,
+    LocalAddressIPv4 nvarchar(45) NOT NULL,
     LocalPort int NOT NULL,
 
     RemoteFqdn nvarchar(255) NULL,
-    RemoteAddressIPv4 varchar(45) NOT NULL,
+    RemoteAddressIPv4 nvarchar(45) NOT NULL,
     RemotePort int NOT NULL,
 
     State nvarchar(50) NULL,
 
-    DateAdded datetimeoffset(0) NOT NULL
+    DateAdded datetime2(0) NOT NULL
         CONSTRAINT DF_connections_DateAdded
-        DEFAULT TODATETIMEOFFSET(SYSUTCDATETIME(), '+00:00'),
+        DEFAULT SYSUTCDATETIME(),
 
     CONSTRAINT PK_connections PRIMARY KEY (Id),
 

@@ -23,7 +23,7 @@ public sealed record EdgeEntity(
     string? TargetProcessName,
 
     long SeenCount,
-    DateTimeOffset LastSeen,
-    DateTimeOffset FirstSeen,
+    DateTime LastSeen,
+    DateTime FirstSeen,
     string EdgeKey // stable id based on the edge properties, not the database row id, computed in the database
 );

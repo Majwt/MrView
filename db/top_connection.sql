@@ -18,28 +18,28 @@ CREATE TABLE dbo.top_connections (
         CONSTRAINT DF_top_connections_seen_count DEFAULT 0,
 
     source_fqdn nvarchar(255) NOT NULL,
-    source_ip varchar(45) NOT NULL,
+    source_ip nvarchar(45) NOT NULL,
     source_port int NULL,
     source_pid int NULL,
     source_process_name nvarchar(255) NULL,
 
     target_fqdn nvarchar(255) NOT NULL,
-    target_ip varchar(45) NOT NULL,
+    target_ip nvarchar(45) NOT NULL,
     target_port int NULL,
     target_pid int NULL,
     target_process_name nvarchar(255) NULL,
 
-    first_seen datetimeoffset(0) NULL,
-    last_seen datetimeoffset(0) NULL,
+    first_seen datetime2(0) NULL,
+    last_seen datetime2(0) NULL,
 
     edge_key AS
-        CONVERT(varchar(64), HASHBYTES(
+        CONVERT(nvarchar(64), HASHBYTES(
             'SHA2_256',
             CONCAT(
                 LOWER(endpoint_a), '|',
                 LOWER(endpoint_b), '|',
                 LOWER(ISNULL(service_fqdn, '')), '|',
-                ISNULL(CONVERT(varchar(20), service_port), '')
+                ISNULL(CONVERT(nvarchar(20), service_port), '')
             )
         ), 2) PERSISTED,
 

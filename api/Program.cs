@@ -1,5 +1,6 @@
 using Api.Database;
 using Api.Models;
+using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,10 +70,15 @@ app.MapGet(
     "/api/graph",
     async (string? lastSeen, long? lastEdgeId, long? lastNodeId, GraphService graphService) =>
     {
-        var correct = DateTimeOffset.TryParse(lastSeen, out DateTimeOffset parsedLastSeen);
+        var correct = DateTime.TryParse(
+            lastSeen,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out DateTime parsedLastSeen
+        );
         if (!correct)
         {
-            parsedLastSeen = DateTimeOffset.UnixEpoch;
+            parsedLastSeen = DateTime.UnixEpoch;
             app.Logger.LogWarning(
                 "Invalid lastSeen value: {0}. Defaulting to UnixEpoch.",
                 lastSeen
@@ -87,10 +93,15 @@ app.MapGet(
 
 app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? lastSeen, long? lastEdgeId, long? lastNodeId, GraphService graphService) =>
 {
-    var correct = DateTimeOffset.TryParse(lastSeen, out DateTimeOffset parsedLastSeen);
+    var correct = DateTime.TryParse(
+        lastSeen,
+        CultureInfo.InvariantCulture,
+        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+        out DateTime parsedLastSeen
+    );
     if (!correct)
     {
-        parsedLastSeen = DateTimeOffset.UnixEpoch;
+        parsedLastSeen = DateTime.UnixEpoch;
         app.Logger.LogWarning(
             "Invalid lastSeen value: {0}. Defaulting to UnixEpoch.",
             lastSeen

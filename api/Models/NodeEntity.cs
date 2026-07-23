@@ -9,6 +9,6 @@ public sealed record NodeEntity(
     long DistinctEdge,
     long ConnectionCount,
     Customer Customer,
-    DateTimeOffset FirstSeen,
-    DateTimeOffset LastSeen
+    DateTime FirstSeen,
+    DateTime LastSeen
 );

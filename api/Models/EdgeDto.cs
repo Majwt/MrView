@@ -14,7 +14,7 @@ public sealed record EdgeDto(
     long? TargetPid,
     string? TargetProcessName,
     long SeenCount,
-    DateTimeOffset LastSeen,
-    DateTimeOffset FirstSeen
+    DateTime LastSeen,
+    DateTime FirstSeen
 );
 

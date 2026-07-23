@@ -33,6 +33,16 @@ public class Db
         return Regex.IsMatch(value, @"^[A-Za-z0-9_]+$");
     }
 
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+        };
+    }
+
     private const string _edgesColumns =
         @"
         id,
@@ -86,7 +96,7 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTime2)
         {
             Value = cursor.LastSeen
         });
@@ -129,7 +139,7 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTime2)
         {
             Value = cursor.LastSeen
         });
@@ -233,8 +243,8 @@ public class Db
                 : reader.GetString(targetProcessNameOrdinal);
 
             var seenCount = reader.GetInt64(seenCountOrdinal);
-            var lastSeen = reader.GetDateTimeOffset(lastSeenOrdinal);
-            var firstSeen = reader.GetDateTimeOffset(firstSeenOrdinal);
+            var lastSeen = EnsureUtc(reader.GetDateTime(lastSeenOrdinal));
+            var firstSeen = EnsureUtc(reader.GetDateTime(firstSeenOrdinal));
 
             var edgeKey = reader.GetString(edgeKeyOrdinal);
 
@@ -299,7 +309,7 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTime2)
         {
             Value = cursor.LastSeen
         });
@@ -337,7 +347,7 @@ public class Db
         await using var command = new SqlCommand(sql, connection);
         _logger.LogInformation("CustomerId: {customerId}", customerId);
         command.Parameters.AddWithValue("@CustomerId", customerId);
-        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTimeOffset)
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTime2)
         {
             Value = cursor.LastSeen
         });
@@ -399,8 +409,8 @@ public class Db
             var cmdbCiId = reader.GetString(cmdbCiIdOrdinal);
             var customerId = reader.GetInt32(customerIdOrdinal);
 
-            var firstSeen = reader.GetDateTimeOffset(firstSeenOrdinal);
-            var lastSeen = reader.GetDateTimeOffset(lastSeenOrdinal);
+            var firstSeen = EnsureUtc(reader.GetDateTime(firstSeenOrdinal));
+            var lastSeen = EnsureUtc(reader.GetDateTime(lastSeenOrdinal));
 
             var customer = new Customer(Name: customerName, CmdbCiId: cmdbCiId, Id: customerId);
 

@@ -14,16 +14,16 @@ CREATE TABLE dbo.nodes (
     Fqdn nvarchar(255) NOT NULL,
     AdapterName nvarchar(128) NULL,
 
-    AddressIPv4 varchar(45) NOT NULL,
-    Subnet varchar(45) NULL,
-    MacAddress varchar(45) NULL,
+    AddressIPv4 nvarchar(45) NOT NULL,
+    Subnet nvarchar(45) NULL,
+    MacAddress nvarchar(45) NULL,
 
     EphemeralPortStart int NULL,
     EphemeralPortEnd int NULL,
 
-    DateAdded datetimeoffset(0) NOT NULL
+    DateAdded datetime2(0) NOT NULL
         CONSTRAINT DF_nodes_DateAdded
-        DEFAULT TODATETIMEOFFSET(SYSUTCDATETIME(), '+00:00'),
+        DEFAULT SYSUTCDATETIME(),
 
     CONSTRAINT PK_nodes PRIMARY KEY (Id),
 

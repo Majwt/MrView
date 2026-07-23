@@ -236,7 +236,7 @@ BEGIN
                         LOWER(n.source_fqdn), '|',
                         LOWER(n.target_fqdn), '|',
                         LOWER(ISNULL(n.target_fqdn, '')), '|',
-                        ISNULL(CONVERT(varchar(20), n.service_port), '')
+                        ISNULL(CONVERT(nvarchar(20), n.service_port), '')
                     )
             FROM normalized n
             LEFT JOIN dbo.known_ports kp

@@ -22,8 +22,8 @@ CREATE TABLE dbo.top_nodes (
     EdgeCount bigint NOT NULL DEFAULT 0,
     ConnectionCount bigint NOT NULL DEFAULT 0,
 
-    FirstSeen datetimeoffset(0) NOT NULL,
-    LastSeen datetimeoffset(0) NOT NULL,
+    FirstSeen datetime2(0) NOT NULL,
+    LastSeen datetime2(0) NOT NULL,
 
     CONSTRAINT PK_top_nodes PRIMARY KEY (Id),
     CONSTRAINT UQ_top_nodes_fqdn UNIQUE (Fqdn)
