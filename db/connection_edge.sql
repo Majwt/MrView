@@ -9,12 +9,14 @@ CREATE TABLE dbo.connection_edge (
 
     endpoint_a_fqdn nvarchar(255) NOT NULL,
     endpoint_a_ipv4 nvarchar(45) NOT NULL,
+    endpoint_a_port int NULL,
     endpoint_a_ciid nvarchar(128) NULL,
     endpoint_a_process_name nvarchar(260) NULL,
     endpoint_a_process_id int NULL,
 
     endpoint_b_fqdn nvarchar(255) NOT NULL,
     endpoint_b_ipv4 nvarchar(45) NOT NULL,
+    endpoint_b_port int NULL,
     endpoint_b_ciid nvarchar(128) NULL,
     endpoint_b_process_name nvarchar(260) NULL,
     endpoint_b_process_id int NULL,

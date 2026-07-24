@@ -38,6 +38,18 @@ BEGIN
             FROM dbo.managed_node
             WHERE fqdn IS NOT NULL
         ),
+        interface_lookup AS (
+            SELECT
+                ni.ciid,
+                ni.address_ipv4,
+                rn = ROW_NUMBER() OVER (
+                    PARTITION BY ni.address_ipv4
+                    ORDER BY ni.last_seen DESC
+                )
+            FROM dbo.node_interface ni
+            WHERE ni.address_ipv4 IS NOT NULL
+              AND ni.address_ipv4 <> ''
+        ),
         alias_lookup AS (
             SELECT
                 alias_name = LOWER(alias_name),
@@ -54,6 +66,7 @@ BEGIN
                 source_fqdn_raw = COALESCE(source_alias.canonical_fqdn, LOWER(COALESCE(source_match.fqdn, r.source_fqdn))),
                 r.source_address_ipv4,
                 source_ciid_raw = r.reporter_ciid,
+                reporter_ciid = r.reporter_ciid,
                 source_port_raw = r.source_port,
 
                 target_fqdn_raw = COALESCE(target_alias.canonical_fqdn, LOWER(r.target_fqdn)),
@@ -90,6 +103,10 @@ BEGIN
                 b.id,
                 b.DateAdded,
                 b.protocol,
+                b.direction,
+                b.process_name,
+                b.process_id,
+                b.reporter_ciid,
 
                 source_fqdn = CASE WHEN b.direction = 'INCOMING' THEN b.target_fqdn_raw ELSE b.source_fqdn_raw END,
                 source_ipv4 = CASE WHEN b.direction = 'INCOMING' THEN b.target_address_ipv4 ELSE b.source_address_ipv4 END,
@@ -104,12 +121,7 @@ BEGIN
                 source_ephemeral_port_start = CASE WHEN b.direction = 'INCOMING' THEN b.target_ephemeral_port_start_raw ELSE b.source_ephemeral_port_start_raw END,
                 source_ephemeral_port_end = CASE WHEN b.direction = 'INCOMING' THEN b.target_ephemeral_port_end_raw ELSE b.source_ephemeral_port_end_raw END,
                 target_ephemeral_port_start = CASE WHEN b.direction = 'INCOMING' THEN b.source_ephemeral_port_start_raw ELSE b.target_ephemeral_port_start_raw END,
-                target_ephemeral_port_end = CASE WHEN b.direction = 'INCOMING' THEN b.source_ephemeral_port_end_raw ELSE b.target_ephemeral_port_end_raw END,
-
-                endpoint_a_process_name = CASE WHEN b.direction = 'INCOMING' THEN NULL ELSE b.process_name END,
-                endpoint_a_process_id = CASE WHEN b.direction = 'INCOMING' THEN NULL ELSE b.process_id END,
-                endpoint_b_process_name = CASE WHEN b.direction = 'INCOMING' THEN b.process_name ELSE NULL END,
-                endpoint_b_process_id = CASE WHEN b.direction = 'INCOMING' THEN b.process_id ELSE NULL END
+                target_ephemeral_port_end = CASE WHEN b.direction = 'INCOMING' THEN b.source_ephemeral_port_end_raw ELSE b.target_ephemeral_port_end_raw END
             FROM raw_base b
         ),
         normalized_resolved AS (
@@ -119,25 +131,71 @@ BEGIN
                 n.protocol,
                 n.source_fqdn,
                 n.source_ipv4,
-                source_ciid = COALESCE(src_node.ciid, n.source_ciid_base),
+                source_ciid = COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base),
                 n.source_port,
                 n.target_fqdn,
                 n.target_ipv4,
-                target_ciid = COALESCE(tgt_node.ciid, n.target_ciid_base),
+                target_ciid = COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base),
                 n.target_port,
                 n.source_ephemeral_port_start,
                 n.source_ephemeral_port_end,
                 n.target_ephemeral_port_start,
                 n.target_ephemeral_port_end,
-                n.endpoint_a_process_name,
-                n.endpoint_a_process_id,
-                n.endpoint_b_process_name,
-                n.endpoint_b_process_id
+                endpoint_a_process_name =
+                    CASE
+                        WHEN COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base) = n.reporter_ciid
+                         AND ISNULL(COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base), '') <> n.reporter_ciid
+                        THEN n.process_name
+                        WHEN COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base) = n.reporter_ciid
+                         AND ISNULL(COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base), '') <> n.reporter_ciid
+                        THEN NULL
+                        WHEN n.direction = 'INCOMING' THEN NULL
+                        ELSE n.process_name
+                    END,
+                endpoint_a_process_id =
+                    CASE
+                        WHEN COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base) = n.reporter_ciid
+                         AND ISNULL(COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base), '') <> n.reporter_ciid
+                        THEN n.process_id
+                        WHEN COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base) = n.reporter_ciid
+                         AND ISNULL(COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base), '') <> n.reporter_ciid
+                        THEN NULL
+                        WHEN n.direction = 'INCOMING' THEN NULL
+                        ELSE n.process_id
+                    END,
+                endpoint_b_process_name =
+                    CASE
+                        WHEN COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base) = n.reporter_ciid
+                         AND ISNULL(COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base), '') <> n.reporter_ciid
+                        THEN n.process_name
+                        WHEN COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base) = n.reporter_ciid
+                         AND ISNULL(COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base), '') <> n.reporter_ciid
+                        THEN NULL
+                        WHEN n.direction = 'INCOMING' THEN n.process_name
+                        ELSE NULL
+                    END,
+                endpoint_b_process_id =
+                    CASE
+                        WHEN COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base) = n.reporter_ciid
+                         AND ISNULL(COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base), '') <> n.reporter_ciid
+                        THEN n.process_id
+                        WHEN COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base) = n.reporter_ciid
+                         AND ISNULL(COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base), '') <> n.reporter_ciid
+                        THEN NULL
+                        WHEN n.direction = 'INCOMING' THEN n.process_id
+                        ELSE NULL
+                    END
             FROM normalized n
             LEFT JOIN managed_lookup src_node
                 ON src_node.fqdn = n.source_fqdn
             LEFT JOIN managed_lookup tgt_node
                 ON tgt_node.fqdn = n.target_fqdn
+            LEFT JOIN interface_lookup src_iface
+                ON src_iface.address_ipv4 = n.source_ipv4
+               AND src_iface.rn = 1
+            LEFT JOIN interface_lookup tgt_iface
+                ON tgt_iface.address_ipv4 = n.target_ipv4
+               AND tgt_iface.rn = 1
         ),
         keyed AS (
             SELECT
@@ -162,6 +220,18 @@ BEGIN
         ranked AS (
             SELECT
                 k.*,
+                rn_latest = ROW_NUMBER() OVER (
+                    PARTITION BY
+                        k.source_fqdn,
+                        k.source_ipv4,
+                        k.target_fqdn,
+                        k.target_ipv4,
+                        k.protocol,
+                        ISNULL(k.service_port, -1)
+                    ORDER BY
+                        k.DateAdded DESC,
+                        k.id DESC
+                ),
                 rn_a = ROW_NUMBER() OVER (
                     PARTITION BY
                         k.source_fqdn,
@@ -194,10 +264,12 @@ BEGIN
             SELECT
                 endpoint_a_fqdn = source_fqdn,
                 endpoint_a_ipv4 = source_ipv4,
+                endpoint_a_port = MAX(CASE WHEN rn_latest = 1 THEN source_port END),
                 endpoint_a_ciid = MAX(source_ciid),
 
                 endpoint_b_fqdn = target_fqdn,
                 endpoint_b_ipv4 = target_ipv4,
+                endpoint_b_port = MAX(CASE WHEN rn_latest = 1 THEN target_port END),
                 endpoint_b_ciid = MAX(target_ciid),
 
                 protocol,
@@ -227,12 +299,14 @@ BEGIN
             SELECT
                 a.endpoint_a_fqdn,
                 a.endpoint_a_ipv4,
+                a.endpoint_a_port,
                 a.endpoint_a_ciid,
                 endpoint_a_process_name = COALESCE(a.endpoint_a_process_name, rev.endpoint_b_process_name),
                 endpoint_a_process_id = COALESCE(a.endpoint_a_process_id, rev.endpoint_b_process_id),
 
                 a.endpoint_b_fqdn,
                 a.endpoint_b_ipv4,
+                a.endpoint_b_port,
                 a.endpoint_b_ciid,
                 endpoint_b_process_name = COALESCE(a.endpoint_b_process_name, rev.endpoint_a_process_name),
                 endpoint_b_process_id = COALESCE(a.endpoint_b_process_id, rev.endpoint_a_process_id),
@@ -292,11 +366,13 @@ BEGIN
             UPDATE SET
                 endpoint_a_fqdn = source.endpoint_a_fqdn,
                 endpoint_a_ipv4 = source.endpoint_a_ipv4,
+                endpoint_a_port = source.endpoint_a_port,
                 endpoint_a_ciid = source.endpoint_a_ciid,
                 endpoint_a_process_name = COALESCE(source.endpoint_a_process_name, target.endpoint_a_process_name),
                 endpoint_a_process_id = COALESCE(source.endpoint_a_process_id, target.endpoint_a_process_id),
                 endpoint_b_fqdn = source.endpoint_b_fqdn,
                 endpoint_b_ipv4 = source.endpoint_b_ipv4,
+                endpoint_b_port = source.endpoint_b_port,
                 endpoint_b_ciid = source.endpoint_b_ciid,
                 endpoint_b_process_name = COALESCE(source.endpoint_b_process_name, target.endpoint_b_process_name),
                 endpoint_b_process_id = COALESCE(source.endpoint_b_process_id, target.endpoint_b_process_id),
@@ -312,11 +388,13 @@ BEGIN
             INSERT (
                 endpoint_a_fqdn,
                 endpoint_a_ipv4,
+                endpoint_a_port,
                 endpoint_a_ciid,
                 endpoint_a_process_name,
                 endpoint_a_process_id,
                 endpoint_b_fqdn,
                 endpoint_b_ipv4,
+                endpoint_b_port,
                 endpoint_b_ciid,
                 endpoint_b_process_name,
                 endpoint_b_process_id,
@@ -331,11 +409,13 @@ BEGIN
             VALUES (
                 source.endpoint_a_fqdn,
                 source.endpoint_a_ipv4,
+                source.endpoint_a_port,
                 source.endpoint_a_ciid,
                 source.endpoint_a_process_name,
                 source.endpoint_a_process_id,
                 source.endpoint_b_fqdn,
                 source.endpoint_b_ipv4,
+                source.endpoint_b_port,
                 source.endpoint_b_ciid,
                 source.endpoint_b_process_name,
                 source.endpoint_b_process_id,
