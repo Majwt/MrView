@@ -8,21 +8,20 @@ CREATE TABLE dbo.connection_edge (
     id bigint IDENTITY(1,1) NOT NULL,
 
     endpoint_a_fqdn nvarchar(255) NOT NULL,
-    endpoint_a_ipv4 varchar(45) NOT NULL,
-    endpoint_a_mac_address char(17) NULL,
-    endpoint_a_server_id nvarchar(128) NULL,
+    endpoint_a_ipv4 nvarchar(45) NOT NULL,
+    endpoint_a_ciid nvarchar(128) NULL,
     endpoint_a_process_name nvarchar(260) NULL,
     endpoint_a_process_id int NULL,
 
     endpoint_b_fqdn nvarchar(255) NOT NULL,
-    endpoint_b_ipv4 varchar(45) NOT NULL,
-    endpoint_b_mac_address char(17) NULL,
-    endpoint_b_server_id nvarchar(128) NULL,
+    endpoint_b_ipv4 nvarchar(45) NOT NULL,
+    endpoint_b_ciid nvarchar(128) NULL,
     endpoint_b_process_name nvarchar(260) NULL,
     endpoint_b_process_id int NULL,
 
-    protocol varchar(10) NOT NULL,
+    protocol nvarchar(10) NOT NULL,
     service_port int NULL,
+    service_name nvarchar(100) NOT NULL CONSTRAINT DF_connection_edge_service_name DEFAULT ('Unknown'),
 
     seen_count bigint NOT NULL CONSTRAINT DF_connection_edge_seen_count DEFAULT (0),
     first_seen datetime2(0) NOT NULL,
@@ -35,10 +34,8 @@ CREATE TABLE dbo.connection_edge (
             CONCAT(
                 LOWER(ISNULL(endpoint_a_fqdn, '')), '|',
                 ISNULL(endpoint_a_ipv4, ''), '|',
-                LOWER(ISNULL(endpoint_a_mac_address, '')), '|',
                 LOWER(ISNULL(endpoint_b_fqdn, '')), '|',
                 ISNULL(endpoint_b_ipv4, ''), '|',
-                LOWER(ISNULL(endpoint_b_mac_address, '')), '|',
                 LOWER(ISNULL(protocol, '')), '|',
                 ISNULL(CONVERT(nvarchar(20), service_port), '')
             )
@@ -46,9 +43,9 @@ CREATE TABLE dbo.connection_edge (
 
     CONSTRAINT PK_connection_edge PRIMARY KEY (id),
     CONSTRAINT FK_connection_edge_a_managed_node
-        FOREIGN KEY (endpoint_a_server_id) REFERENCES dbo.managed_node(server_id),
+        FOREIGN KEY (endpoint_a_ciid) REFERENCES dbo.managed_node(ciid),
     CONSTRAINT FK_connection_edge_b_managed_node
-        FOREIGN KEY (endpoint_b_server_id) REFERENCES dbo.managed_node(server_id),
+        FOREIGN KEY (endpoint_b_ciid) REFERENCES dbo.managed_node(ciid),
     CONSTRAINT CK_connection_edge_service_port
         CHECK (service_port IS NULL OR (service_port BETWEEN 0 AND 65535))
 );

@@ -5,8 +5,11 @@ DROP TABLE IF EXISTS dbo.managed_node;
 GO
 
 CREATE TABLE dbo.managed_node (
-    server_id nvarchar(128) NOT NULL,
+    ciid nvarchar(128) NOT NULL,
     fqdn nvarchar(255) NULL,
+    os nvarchar(100) NULL,
+    os_distribution nvarchar(255) NULL,
+    os_version nvarchar(255) NULL,
     os_version_family nvarchar(100) NULL,
     os_version_distribution nvarchar(255) NULL,
     os_version_specifier nvarchar(255) NULL,
@@ -16,7 +19,7 @@ CREATE TABLE dbo.managed_node (
     last_seen datetime2(0) NOT NULL,
     is_active bit NOT NULL CONSTRAINT DF_managed_node_is_active DEFAULT (1),
 
-    CONSTRAINT PK_managed_node PRIMARY KEY (server_id)
+    CONSTRAINT PK_managed_node PRIMARY KEY (ciid)
 );
 GO
 

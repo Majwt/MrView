@@ -12,34 +12,36 @@ BEGIN
 
         ;WITH latest AS (
             SELECT
-                nr.server_id,
+                nr.ciid,
                 nr.fqdn,
                 nr.os_version_family,
-                nr.os_version_distribution,
                 nr.os_version_specifier,
                 nr.group_id,
                 nr.group_name,
-                nr.observed_at,
+                nr.DateAdded,
                 rn = ROW_NUMBER() OVER (
-                    PARTITION BY nr.server_id
-                    ORDER BY nr.observed_at DESC, nr.id DESC
+                    PARTITION BY nr.ciid
+                    ORDER BY nr.DateAdded DESC, nr.id DESC
                 )
             FROM dbo.node_raw nr
         ),
         aggregate_range AS (
             SELECT
-                nr.server_id,
-                first_seen = MIN(nr.observed_at),
-                last_seen = MAX(nr.observed_at)
+                nr.ciid,
+                first_seen = MIN(nr.DateAdded),
+                last_seen = MAX(nr.DateAdded)
             FROM dbo.node_raw nr
-            GROUP BY nr.server_id
+            GROUP BY nr.ciid
         ),
         source_rows AS (
             SELECT
-                l.server_id,
+                l.ciid,
                 l.fqdn,
+                os = l.os_version_family,
+                os_distribution = CAST(NULL AS nvarchar(255)),
+                os_version = l.os_version_specifier,
                 l.os_version_family,
-                l.os_version_distribution,
+                os_version_distribution = CAST(NULL AS nvarchar(255)),
                 l.os_version_specifier,
                 l.group_id,
                 l.group_name,
@@ -47,16 +49,19 @@ BEGIN
                 a.last_seen
             FROM latest l
             JOIN aggregate_range a
-                ON a.server_id = l.server_id
+                ON a.ciid = l.ciid
             WHERE l.rn = 1
         )
         MERGE dbo.managed_node AS target
         USING source_rows AS source
-        ON target.server_id = source.server_id
+        ON target.ciid = source.ciid
 
         WHEN MATCHED THEN
             UPDATE SET
                 fqdn = source.fqdn,
+                os = source.os,
+                os_distribution = source.os_distribution,
+                os_version = source.os_version,
                 os_version_family = source.os_version_family,
                 os_version_distribution = source.os_version_distribution,
                 os_version_specifier = source.os_version_specifier,
@@ -72,8 +77,11 @@ BEGIN
 
         WHEN NOT MATCHED THEN
             INSERT (
-                server_id,
+                ciid,
                 fqdn,
+                os,
+                os_distribution,
+                os_version,
                 os_version_family,
                 os_version_distribution,
                 os_version_specifier,
@@ -84,8 +92,11 @@ BEGIN
                 is_active
             )
             VALUES (
-                source.server_id,
+                source.ciid,
                 source.fqdn,
+                source.os,
+                source.os_distribution,
+                source.os_version,
                 source.os_version_family,
                 source.os_version_distribution,
                 source.os_version_specifier,
