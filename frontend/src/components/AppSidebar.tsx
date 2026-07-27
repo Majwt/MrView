@@ -15,7 +15,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { NavLink } from "react-router";
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useState } from "react";
 import SidebarCustomerSelect from "./SideBarCustomerSelect";
 import { Item, ItemContent, ItemTitle } from "./ui/item";
 import { fetchStatus } from "@/api/status-api";
@@ -46,37 +46,48 @@ export type sidebarSection = {
   content: sidebarLink[];
 }
 
-const StatusColors = {
-  "Healthy": "green-500",
-  "Degraded": "yellow-500",
-  "Down": "red-500"
-}
-
 export type Status = "Healthy" | "Degraded" | "Down";
 
-const StatusIndicator = ({ status, size = 2 }: { status: Status; size?: number }) => {
+const statusDotClass = (status: Status) => {
+  if (status === "Healthy") return "bg-emerald-500";
+  if (status === "Degraded") return "bg-amber-500";
+  return "bg-rose-500";
+};
 
-  const color = StatusColors[status] ?? "green-500" //StatusColors[status];
+const statusTextClass = (status: Status) => {
+  if (status === "Healthy") return "text-emerald-600";
+  if (status === "Degraded") return "text-amber-600";
+  return "text-rose-600";
+};
+
+const statusBadgeClass = (status: Status) => {
+  if (status === "Healthy") return "border-emerald-500/30 bg-emerald-500/10";
+  if (status === "Degraded") return "border-amber-500/30 bg-amber-500/10";
+  return "border-rose-500/30 bg-rose-500/10";
+};
+
+const StatusIndicator = ({ status, size = 2 }: { status: Status; size?: number }) => {
+  const dotColor = statusDotClass(status);
+  const dotSize = size === 3 ? "h-3 w-3" : "h-2.5 w-2.5";
 
   return (
-    <div className={`relative flex h-2 w-2`}>
-      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full bg-${color} opacity-75`}></span>
-      <span className={`relative inline-flex h-${size} w-${size} rounded-full bg-${color}`}></span>
+    <div className={`relative flex ${dotSize}`}>
+      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${dotColor} opacity-60`}></span>
+      <span className={`relative inline-flex ${dotSize} rounded-full ${dotColor}`}></span>
     </div>
 
   )
 
 }
 
-const StatusBadge = ({ status, children }: { status: Status, children: ReactElement }) => {
-
-
+const StatusBadge = ({ status }: { status: Status }) => {
   return (
-    <div className="p-1 flex flex-row justify-items-start items-center gap-2 ">
-      <StatusIndicator status={status} />
-      <div className="flex flex-row justify-items-center gap-2 items-center ">
-        {children}
+    <div className={`p-2 flex flex-row justify-between items-center gap-2 rounded-md border ${statusBadgeClass(status)}`}>
+      <div className="flex flex-row items-center gap-2">
+        <StatusIndicator status={status} size={3} />
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">App Status</span>
       </div>
+      <span className={`text-sm font-semibold ${statusTextClass(status)}`}>{status}</span>
     </div>
   );
 }
@@ -115,24 +126,13 @@ const AppInfo = () => {
 
   }, [])
 
-  const total_nodes = 12345;
-
   return (
     <div className="px-2 py-2 items-center gap-2 border-2 rounded-md  bg-popover text-popover-foreground">
       <Item >
         <ItemContent>
           <ItemTitle>Status</ItemTitle>
 
-          <StatusBadge status={serverStatus}>
-            <>
-              <span className="text-muted-foreground">DB Conn</span>
-              <span className={`text-${StatusColors[serverStatus]}`}>{serverStatus}</span>
-            </>
-          </StatusBadge>
-          {/* <h6 className="text-xs text-muted-foreground">Total Nodes</h6> */}
-          <StatusBadge status="Healthy">
-            <span className="text-muted-foreground font-mono">{total_nodes}</span>
-          </StatusBadge>
+          <StatusBadge status={serverStatus} />
         </ItemContent>
       </Item>
       <div className="flex flex-row items-center gap-2 px-2 py-2">

@@ -4,9 +4,6 @@ using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = System
@@ -25,9 +22,9 @@ builder
             o.IsValid()
             && builder.Configuration.GetConnectionString(Config.CONNECTION_STRING_NAME) != null,
         "Invalid database configuration. \nOne of the following conditions is not met: \n"
-            + "1. EdgeTable and NodeTable must be in the format [schema].[table] or schema.table, where schema and table consist of letters, numbers, or underscores. \n"
+            + "1. EdgeTable, NodeTable, InterfaceTable, and PortsTable must be in the format [schema].[table] or schema.table, where schema and table consist of letters, numbers, or underscores. \n"
             + "2. SeenCountThreshold must be a non-negative integer. \n"
-            + "3. A valid connection string named 'DefaultConnection' must be provided in the configuration.\n"
+            + "3. A valid connection string named 'Default' must be provided in the configuration.\n"
     )
     .ValidateOnStart();
 
@@ -44,11 +41,6 @@ builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
 
 app.UseHttpsRedirection();
 app.Logger.LogInformation("Starting API v{0}", typeof(Program).Assembly.GetName().Version);

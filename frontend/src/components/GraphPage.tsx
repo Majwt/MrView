@@ -299,6 +299,12 @@ export default function GraphPage() {
                         <span className="font-mono text-[11px] text-foreground">{intf.mac}</span>
                       </>
                     )}
+                    {intf.status && (
+                      <>
+                        <span>Status</span>
+                        <span className="font-mono text-[11px] text-foreground">{intf.status}</span>
+                      </>
+                    )}
                   </div>
                 ))}
 

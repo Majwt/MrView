@@ -87,6 +87,11 @@ export default function NodeDetailsPanel({
                 <DetailItem label="MAC">
                   <MonoIdCell value={netInterface.mac} />
                 </DetailItem>
+                {netInterface.status ? (
+                  <DetailItem label="Status">
+                    <div className="text-sm">{netInterface.status}</div>
+                  </DetailItem>
+                ) : null}
               </div>
             </div>
           ))}

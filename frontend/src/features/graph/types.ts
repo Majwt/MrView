@@ -12,6 +12,7 @@ export type NetInterface = {
   ip: string;
   mac: string;
   subnet: string;
+  status?: string;
 };
 export type GraphNode = d3.SimulationNodeDatum & {
   id: string;

@@ -26,10 +26,10 @@ const LABEL_STROKE_WIDTH = 4;
 const LABEL_NODE_GAP = 10;
 const LABEL_FULL_VISIBILITY_ZOOM = 2.1;
 const LABEL_MIN_VISIBILITY_ZOOM = 0.3;
-const DIMMED_COLOR = "rgba(148, 163, 184, 1)";
+const DIMMED_COLOR = "rgba(148, 163, 184, 0.18)";
 const DIMMED_TEXT_COLOR = "rgba(148, 163, 184, 0.0)";
 const DEFAULT_EDGE_COLOR = "rgba(148, 163, 184, 1)";
-const HIGHLIGHT_COLOR = "#ff2ad4";
+const HIGHLIGHT_COLOR = "#ff88ff";
 
 
 type EdgeMetadata = {
@@ -318,28 +318,57 @@ function drawEdges(
     visibleNodeIds: Set<string>;
   },
 ) {
-  context.save();
-  context.strokeStyle = DEFAULT_EDGE_COLOR;
-  context.lineWidth = EDGE_WIDTH;
+  const hasHoveredEdge = (hoveredEdgeIds?.size ?? 0) > 0;
+
+  function getEdgeStyle(edge: GraphEdge): { color: string; width: number; priority: number } {
+    const highlighted = isEdgeHighlighted(edge, hoveredEdgeIds);
+    const focused = !focus.isActive || focus.edgeIds.has(edge.id);
+
+    if (highlighted) {
+      return { color: HIGHLIGHT_COLOR, width: EDGE_WIDTH * 1.8, priority: 2 };
+    }
+    if (focus.isActive && focused) {
+      return {
+        color: hasHoveredEdge ? DEFAULT_EDGE_COLOR : HIGHLIGHT_COLOR,
+        width: EDGE_WIDTH * 1.2,
+        priority: hasHoveredEdge ? 0 : 1,
+      };
+    }
+    if (focused) {
+      return { color: DEFAULT_EDGE_COLOR, width: EDGE_WIDTH * 1.2, priority: 0 };
+    }
+    return { color: DIMMED_COLOR, width: EDGE_WIDTH, priority: -1 };
+  }
+
+  type EdgeBucket = { edge: GraphEdge; source: GraphNode; target: GraphNode };
+  const buckets = new Map<string, { color: string; width: number; priority: number; edges: EdgeBucket[] }>();
 
   for (const edge of edges) {
     if (!isEdgeVisible(edge, nodes, visibleEdgeIds, visibleNodeIds)) continue;
 
     const source = getNode(nodes, edge.source);
     const target = getNode(nodes, edge.target);
-    const highlighted = isEdgeHighlighted(edge, hoveredEdgeIds);
-    const focused = !focus.isActive || focus.edgeIds.has(edge.id);
+    const { color, width, priority } = getEdgeStyle(edge);
+    const key = `${priority}:${color}:${width}`;
 
-    context.strokeStyle =
-      highlighted || (focus.isActive && focused)
-        ? HIGHLIGHT_COLOR
-        : focused
-          ? DEFAULT_EDGE_COLOR
-          : DIMMED_COLOR;
-    context.lineWidth = highlighted || focused ? EDGE_WIDTH * 1.8 : EDGE_WIDTH;
-    drawEdgePath(context, source, target, edgePairCounts);
-    context.stroke();
-    drawArrowHead(context, source, target, edgePairCounts);
+    if (!buckets.has(key)) {
+      buckets.set(key, { color, width, priority, edges: [] });
+    }
+    buckets.get(key)!.edges.push({ edge, source, target });
+  }
+
+  const sortedBuckets = [...buckets.values()].sort((a, b) => a.priority - b.priority);
+
+  context.save();
+
+  for (const bucket of sortedBuckets) {
+    context.strokeStyle = bucket.color;
+    context.lineWidth = bucket.width;
+    for (const { source, target } of bucket.edges) {
+      drawEdgePath(context, source, target, edgePairCounts);
+      context.stroke();
+      drawArrowHead(context, source, target, edgePairCounts);
+    }
   }
 
   context.restore();
