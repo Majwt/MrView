@@ -6,16 +6,15 @@ import { filtersReducer } from "@/features/filters/filters-reducer";
 import { applyGraphDelta } from "@/features/graph/apply-graph-delta";
 import { normalizeGraphSnapshot } from "@/features/graph/normalize-graph-snapshot";
 import type { GraphSnapshot } from "@/features/graph/types";
-import { readUrlState, type TableView, writeUrlState } from "@/features/url-state";
+import { readUrlState, writeUrlState } from "@/features/url-state";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
 import FilterBar from "./FilterBar";
 import GraphViewD3 from "./GraphViewD3";
 import NodeDetailsPanel from "./NodeDetailsPanel";
 import { type TableConnection, connectionColumns } from "./table/connection-columns";
 import { DataTable } from "./table/data-table";
-import { type TableNode, nodeColumns } from "./table/node-columns";
-import { Button } from "./ui/button";
+
 import { Input } from "./ui/input";
 import { useParams } from "react-router";
 
@@ -32,29 +31,27 @@ export default function GraphPage() {
   const [snapshot, setSnapshot] = useState<GraphSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tableView, setTableView] = useState<TableView>(initialUrlState.tableView);
   const [selectedNodeFqdn, setSelectedNodeFqdn] = useState<string | null>(
     initialUrlState.selectedNodeFqdn,
   );
   const [hoveredNodeFqdn, setHoveredNodeFqdn] = useState<string | null>(null);
-  const [hoveredNodePosition, setHoveredNodePosition] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const handleHoverPositionChange = useCallback((pos: { x: number; y: number } | null) => {
+    if (!tooltipRef.current) return;
+    if (pos) {
+      tooltipRef.current.style.left = `${pos.x + 14}px`;
+      tooltipRef.current.style.top = `${pos.y + 14}px`;
+      tooltipRef.current.style.display = "";
+    } else {
+      tooltipRef.current.style.display = "none";
+    }
+  }, []);
   const [hoveredConnectionIds, setHoveredConnectionIds] = useState<Set<string>>(() => new Set());
   const [globalSearch, setGlobalSearch] = useState(initialUrlState.globalSearch);
 
+  const [, startTransition] = useTransition();
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialUrlState.filters);
   const filterSuggestions = useMemo(() => buildFilterSuggestions(snapshot), [snapshot]);
-
-  const nodeFilteredSnapshot = useMemo(() => {
-    if (!snapshot) return null;
-
-    return applyGraphFilters(snapshot, filters);
-  }, [snapshot, filters]);
-  const nodeSearchedSnapshot = useMemo(
-    () => applyGlobalSearch(nodeFilteredSnapshot, globalSearch, "node"),
-    [nodeFilteredSnapshot, globalSearch],
-  );
 
   const connectionFilteredSnapshot = useMemo(() => {
     if (!snapshot) return null;
@@ -66,7 +63,7 @@ export default function GraphPage() {
     [connectionFilteredSnapshot, globalSearch],
   );
 
-  const graphSnapshot = tableView === "nodes" ? nodeSearchedSnapshot : connectionSearchedSnapshot;
+  const graphSnapshot = connectionSearchedSnapshot;
 
   const visibleNodeIds = useMemo(
     () => new Set(graphSnapshot?.nodes.map((node) => node.fqdn) ?? []),
@@ -84,28 +81,6 @@ export default function GraphPage() {
   const selectedNode = selectedNodeFqdn ? nodesByFqdn.get(selectedNodeFqdn) : undefined;
   const contextNodeFqdn = hoveredNodeFqdn ?? selectedNodeFqdn;
   const contextNode = contextNodeFqdn ? nodesByFqdn.get(contextNodeFqdn) : undefined;
-
-  const tableNodes: TableNode[] = useMemo(() => {
-    if (nodeSearchedSnapshot == null) return [];
-
-    const tableNodes = nodeSearchedSnapshot.nodes.map((node) => {
-      const tableNode: TableNode = {
-        id: node.id,
-        fqdn: node.fqdn,
-        ipv4: node.interfaces[0]?.ip ?? "",
-        mac_address: node.interfaces[0]?.mac ?? "",
-        hostname: node.hostname,
-        distinct_edges: node.distinct_edge,
-        connections: node.connection_count,
-        firstSeen: node.first_seen,
-        lastSeen: node.last_seen,
-      };
-
-      return tableNode;
-    });
-
-    return tableNodes;
-  }, [nodeSearchedSnapshot]);
 
   const tableConnections: TableConnection[] = useMemo(() => {
     if (connectionSearchedSnapshot == null) return [];
@@ -175,15 +150,14 @@ export default function GraphPage() {
       filters,
       globalSearch,
       selectedNodeFqdn,
-      tableView,
+      tableView: "connections",
     });
-  }, [filters, globalSearch, selectedNodeFqdn, tableView]);
+  }, [filters, globalSearch, selectedNodeFqdn]);
 
   useEffect(() => {
     function syncStateFromUrl() {
       const urlState = readUrlState();
 
-      setTableView(urlState.tableView);
       setSelectedNodeFqdn(urlState.selectedNodeFqdn);
       setGlobalSearch(urlState.globalSearch);
       dispatchFilters({ type: "replaceRules", rules: urlState.filters.rules });
@@ -238,163 +212,121 @@ export default function GraphPage() {
       ) : (
         <>
 
-          <section className="relative min-h-0 border-b">
-            {snapshot ? (
-              <GraphViewD3
-                graphData={snapshot}
-                visibleEdgeIds={visibleEdgeIds}
-                visibleNodeIds={visibleNodeIds}
-                hoveredEdgeIds={hoveredConnectionIds}
-                hoveredNodeId={hoveredNodeFqdn}
-                selectedNodeId={selectedNodeFqdn}
-                onEdgeHoverChange={(edgeIds) => setHoveredConnectionIds(new Set(edgeIds))}
-                onNodeHoverChange={setHoveredNodeFqdn}
-                onNodeHoverPositionChange={setHoveredNodePosition}
-                onNodeSelect={selectNodeConnections}
-                onStageClick={() => setSelectedNodeFqdn(null)}
-              />
-            ) : (
-              <div className="p-6 text-sm text-muted-foreground">No data to display.</div>
-            )}
-            {contextNode && hoveredNodePosition ? (
+          <section className="relative flex min-h-0 border-b">
+            <div className="relative flex-1 min-h-0">
+              {snapshot ? (
+                <GraphViewD3
+                  graphData={snapshot}
+                  visibleEdgeIds={visibleEdgeIds}
+                  visibleNodeIds={visibleNodeIds}
+                  hoveredEdgeIds={hoveredConnectionIds}
+                  hoveredNodeId={hoveredNodeFqdn}
+                  selectedNodeId={selectedNodeFqdn}
+                  onEdgeHoverChange={(edgeIds) => setHoveredConnectionIds(new Set(edgeIds))}
+                  onNodeHoverChange={setHoveredNodeFqdn}
+                  onNodeHoverPositionChange={handleHoverPositionChange}
+                  onNodeSelect={selectNodeConnections}
+                  onStageClick={() => startTransition(() => setSelectedNodeFqdn(null))}
+                />
+              ) : (
+                <div className="p-6 text-sm text-muted-foreground">No data to display.</div>
+              )}
               <div
+                ref={tooltipRef}
                 className="pointer-events-none absolute z-20 max-w-120 rounded-md border bg-background/95 px-3 py-2 text-xs shadow-sm backdrop-blur"
-                style={{
-                  left: `${hoveredNodePosition.x + 14}px`,
-                  top: `${hoveredNodePosition.y + 14}px`,
-                }}
+                style={{ display: "none", left: 0, top: 0 }}
               >
-                <div className="mb-1 inline-flex items-center gap-2">
-
-                  <span className="border-2 rounded-md p-1 font-medium">{contextNode.customer.name || "Unknown"}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
-                  <span>Node</span>
-                  <span className="font-mono text-[11px] text-foreground">{contextNode.fqdn}</span>
-                  {contextNode.customer.cmdb_ci_id ? (
-                    <>
-                      <span>CmdbCiId</span>
-                      <span className="font-mono text-[11px] text-foreground">
-                        {contextNode.customer.cmdb_ci_id}
-                      </span>
-                    </>
-                  ) : null}
-                </div>
-                {contextNode.interfaces.map((intf) => (
-
-                  <div key={intf.ip} className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
-                    <span>IP</span>
-                    <span className="font-mono text-[11px] text-foreground">{intf.ip}</span>
-                    {intf.subnet && (
+                {contextNode ? (<>
+                  <div className="mb-1 inline-flex items-center gap-2">
+                    <span className="border-2 rounded-md p-1 font-medium">{contextNode.customer.name || "Unknown"}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                    <span>Node</span>
+                    <span className="font-mono text-[11px] text-foreground">{contextNode.fqdn}</span>
+                    {contextNode.customer.cmdb_ci_id ? (
                       <>
-                        <span>Subnet</span>
+                        <span>CmdbCiId</span>
                         <span className="font-mono text-[11px] text-foreground">
-                          {intf.subnet}
+                          {contextNode.customer.cmdb_ci_id}
                         </span>
                       </>
-                    )}
-                    {intf.mac && (
-                      <>
-                        <span>MAC</span>
-                        <span className="font-mono text-[11px] text-foreground">{intf.mac}</span>
-                      </>
-                    )}
-                    {intf.status && (
-                      <>
-                        <span>Status</span>
-                        <span className="font-mono text-[11px] text-foreground">{intf.status}</span>
-                      </>
-                    )}
+                    ) : null}
                   </div>
-                ))}
-
+                  {contextNode.interfaces.map((intf) => (
+                    <div key={intf.ip} className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                      <span>IP</span>
+                      <span className="font-mono text-[11px] text-foreground">{intf.ip}</span>
+                      {intf.subnet && (
+                        <>
+                          <span>Subnet</span>
+                          <span className="font-mono text-[11px] text-foreground">
+                            {intf.subnet}
+                          </span>
+                        </>
+                      )}
+                      {intf.mac && (
+                        <>
+                          <span>MAC</span>
+                          <span className="font-mono text-[11px] text-foreground">{intf.mac}</span>
+                        </>
+                      )}
+                      {intf.status && (
+                        <>
+                          <span>Status</span>
+                          <span className="font-mono text-[11px] text-foreground">{intf.status}</span>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </>) : null}
               </div>
-            ) : null}
+            </div>
+            <aside className="w-96 shrink-0 border-l overflow-y-auto">
+              {selectedNode ? (
+                <NodeDetailsPanel
+                  node={selectedNode}
+                  onBack={() => startTransition(() => setSelectedNodeFqdn(null))}
+                />
+              ) : (
+                <div className="p-4 text-sm text-muted-foreground">Select a node to view details.</div>
+              )}
+            </aside>
           </section>
 
           <section className="flex min-h-0 flex-col overflow-hidden p-4">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <Input
-                  className="h-8 w-56"
-                  placeholder={tableView === "nodes" ? "Search nodes..." : "Search connections..."}
-                  value={globalSearch}
-                  onChange={(event) => setGlobalSearch(event.target.value)}
-                />
-
-                {tableView === "nodes" ? (
-                  <FilterBar
-                    dispatch={dispatchFilters}
-                    filters={filters}
-                    suggestions={filterSuggestions}
-                  />
-                ) : (
-                  <>
-                    <FilterBar
-                      dispatch={dispatchFilters}
-                      filters={filters}
-                      suggestions={filterSuggestions}
-                    />
-                    {selectedNodeFqdn ? (
-                      <div className="inline-flex h-7 items-center gap-2 rounded-md border bg-muted px-2 text-xs">
-                        <span>Connected to {selectedNodeFqdn}</span>
-                        <button
-                          type="button"
-                          aria-label={`Clear selected node ${selectedNodeFqdn}`}
-                          className="rounded-sm p-0.5 hover:bg-background/70"
-                          onClick={() => setSelectedNodeFqdn(null)}
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </div>
-
-              <div className="ml-auto flex shrink-0 rounded-md border p-0.5">
-                <Button
-                  variant={tableView === "nodes" ? "default" : "ghost"}
-                  size="sm"
-                  className="h-7"
-                  onClick={() => setTableView("nodes")}
-                >
-                  Nodes
-                </Button>
-                <Button
-                  variant={tableView === "connections" ? "default" : "ghost"}
-                  size="sm"
-                  className="h-7"
-                  onClick={() => setTableView("connections")}
-                >
-                  Connections
-                </Button>
-              </div>
-            </div>
-            {tableView === "nodes" ? (
-              selectedNode ? (
-                <NodeDetailsPanel
-                  node={selectedNode}
-                  onBack={() => setSelectedNodeFqdn(null)}
-                />
-              ) : (
-                <DataTable
-                  columns={nodeColumns}
-                  data={tableNodes}
-                  getRowHoverId={(row) => row.fqdn}
-                  hoveredRowId={hoveredNodeFqdn}
-                  onRowHoverChange={setHoveredNodeFqdn}
-                />
-              )
-            ) : (
-              <DataTable
-                columns={connectionColumns}
-                data={tableConnections}
-                getRowHoverId={(row) => row.id}
-                hoveredRowIds={hoveredConnectionIds}
-                onRowHoverChange={setHoveredConnectionId}
+              <Input
+                className="h-8 w-56"
+                placeholder="Search connections..."
+                value={globalSearch}
+                onChange={(event) => setGlobalSearch(event.target.value)}
               />
-            )}
+              <FilterBar
+                dispatch={dispatchFilters}
+                filters={filters}
+                suggestions={filterSuggestions}
+              />
+              {selectedNodeFqdn ? (
+                <div className="inline-flex h-7 items-center gap-2 rounded-md border bg-muted px-2 text-xs">
+                  <span>Connected to {selectedNodeFqdn}</span>
+                  <button
+                    type="button"
+                    aria-label={`Clear selected node ${selectedNodeFqdn}`}
+                    className="rounded-sm p-0.5 hover:bg-background/70"
+                    onClick={() => startTransition(() => setSelectedNodeFqdn(null))}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <DataTable
+              columns={connectionColumns}
+              data={tableConnections}
+              getRowHoverId={(row) => row.id}
+              hoveredRowIds={hoveredConnectionIds}
+              onRowHoverChange={setHoveredConnectionId}
+            />
           </section>
 
         </>

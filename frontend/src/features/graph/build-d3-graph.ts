@@ -320,9 +320,27 @@ function drawEdges(
 ) {
   const hasHoveredEdge = (hoveredEdgeIds?.size ?? 0) > 0;
 
-  function getEdgeStyle(edge: GraphEdge): { color: string; width: number; priority: number } {
-    const highlighted = isEdgeHighlighted(edge, hoveredEdgeIds);
-    const focused = !focus.isActive || focus.edgeIds.has(edge.id);
+  // Collapse all edges between the same directed node pair into one visual line.
+  // This dramatically reduces draw calls on dense graphs (e.g. many ports per host pair).
+  type EdgeGroup = { source: GraphNode; target: GraphNode; ids: string[] };
+  const pairGroups = new Map<string, EdgeGroup>();
+
+  for (const edge of edges) {
+    if (!isEdgeVisible(edge, nodes, visibleEdgeIds, visibleNodeIds)) continue;
+    const source = getNode(nodes, edge.source);
+    const target = getNode(nodes, edge.target);
+    const key = ToEdgeKey(source.fqdn, target.fqdn);
+    const existing = pairGroups.get(key);
+    if (existing) {
+      existing.ids.push(edge.id);
+    } else {
+      pairGroups.set(key, { source, target, ids: [edge.id] });
+    }
+  }
+
+  function getGroupStyle(ids: string[]): { color: string; width: number; priority: number } {
+    const highlighted = ids.some((id) => hoveredEdgeIds?.has(id));
+    const focused = !focus.isActive || ids.some((id) => focus.edgeIds.has(id));
 
     if (highlighted) {
       return { color: HIGHLIGHT_COLOR, width: EDGE_WIDTH * 1.8, priority: 2 };
@@ -340,21 +358,18 @@ function drawEdges(
     return { color: DIMMED_COLOR, width: EDGE_WIDTH, priority: -1 };
   }
 
-  type EdgeBucket = { edge: GraphEdge; source: GraphNode; target: GraphNode };
-  const buckets = new Map<string, { color: string; width: number; priority: number; edges: EdgeBucket[] }>();
+  type Bucket = { color: string; width: number; priority: number; groups: EdgeGroup[] };
+  const buckets = new Map<string, Bucket>();
 
-  for (const edge of edges) {
-    if (!isEdgeVisible(edge, nodes, visibleEdgeIds, visibleNodeIds)) continue;
-
-    const source = getNode(nodes, edge.source);
-    const target = getNode(nodes, edge.target);
-    const { color, width, priority } = getEdgeStyle(edge);
+  for (const group of pairGroups.values()) {
+    const { color, width, priority } = getGroupStyle(group.ids);
     const key = `${priority}:${color}:${width}`;
-
-    if (!buckets.has(key)) {
-      buckets.set(key, { color, width, priority, edges: [] });
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.groups.push(group);
+    } else {
+      buckets.set(key, { color, width, priority, groups: [group] });
     }
-    buckets.get(key)!.edges.push({ edge, source, target });
   }
 
   const sortedBuckets = [...buckets.values()].sort((a, b) => a.priority - b.priority);
@@ -364,7 +379,7 @@ function drawEdges(
   for (const bucket of sortedBuckets) {
     context.strokeStyle = bucket.color;
     context.lineWidth = bucket.width;
-    for (const { source, target } of bucket.edges) {
+    for (const { source, target } of bucket.groups) {
       drawEdgePath(context, source, target, edgePairCounts);
       context.stroke();
       drawArrowHead(context, source, target, edgePairCounts);
@@ -609,10 +624,6 @@ function isEdgeVisible(
     isNodeVisible(getNode(nodes, edge.target), visibleNodeIds) &&
     visibleEdgeIds.has(edge.id)
   );
-}
-
-function isEdgeHighlighted(edge: GraphEdge, hoveredEdgeIds?: Set<string>) {
-  return hoveredEdgeIds?.has(edge.id) ?? false;
 }
 
 function ToEdgeKey(a: string, b: string) {

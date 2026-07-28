@@ -5,8 +5,6 @@ import {
   buildEdgeMetadata,
   buildLabelZoomThresholds,
   createGraphEdges,
-  edgeConnectionIds,
-  edgesConnectedTo,
   findVisibleNodeAt,
   getFocusState,
   renderGraph,
@@ -47,6 +45,8 @@ export default function GraphViewD3({
   const edgesRef = useRef<GraphEdge[]>([]);
   const edgePairCountsRef = useRef<Map<string, number>>(new Map());
   const labelZoomThresholdsRef = useRef<Map<string, number>>(new Map());
+  // adjacency map: nodeFqdn → edge IDs (rebuilt when graph data changes)
+  const nodeEdgeMapRef = useRef<Map<string, string[]>>(new Map());
   const topologySignatureRef = useRef({ nodes: "", edges: "" });
   const latestRef = useRef({
     visibleNodeIds,
@@ -61,6 +61,7 @@ export default function GraphViewD3({
     onStageClick,
   });
 
+  // Always keep the latest callbacks in the ref so D3 handlers use current closures.
   useEffect(() => {
     latestRef.current = {
       visibleNodeIds,
@@ -74,8 +75,13 @@ export default function GraphViewD3({
       onNodeSelect,
       onStageClick,
     };
-    requestRenderRef.current();
   });
+
+  // Only repaint when filter/selection props change.
+  // Hover-driven repaints are handled directly by the D3 event handlers below.
+  useEffect(() => {
+    requestRenderRef.current();
+  }, [visibleNodeIds, visibleEdgeIds, selectedNodeId]);
 
 
   useEffect(() => {
@@ -92,7 +98,17 @@ export default function GraphViewD3({
     let height = 1;
     let transform = d3.zoomIdentity;
     let hoveredNode: GraphNode | null = null;
+    let localHoveredEdgeIds = new Set<string>();
     let pendingFrame = 0;
+    let textColor = "#111827";
+    let labelBackground = "#ffffff";
+
+    function refreshStyles() {
+      const styles = getComputedStyle(canvas!);
+      textColor = styles.color || "#111827";
+      labelBackground = styles.getPropertyValue("--background").trim() || "#ffffff";
+    }
+    refreshStyles();
 
     const simulation = d3
       .forceSimulation<GraphNode, GraphEdge>(nodesRef.current)
@@ -164,12 +180,14 @@ export default function GraphViewD3({
 
         if (node?.fqdn !== hoveredNode?.fqdn) {
           hoveredNode = node;
+          const connectedEdgeIds = node
+            ? (nodeEdgeMapRef.current.get(node.fqdn) ?? [])
+            : [];
+          localHoveredEdgeIds = new Set(connectedEdgeIds);
           latestRef.current.onNodeHoverChange?.(node?.fqdn ?? null);
-          latestRef.current.onEdgeHoverChange?.(
-            node
-              ? edgesConnectedTo(edgesRef.current, nodesRef.current, node).flatMap(edgeConnectionIds)
-              : [],
-          );
+          latestRef.current.onEdgeHoverChange?.(connectedEdgeIds);
+          // Only repaint when the hovered node actually changes.
+          requestRender();
         }
 
         if (node) {
@@ -180,10 +198,10 @@ export default function GraphViewD3({
         }
 
         canvas.style.cursor = node ? "pointer" : "grab";
-        requestRender();
       })
       .on("mouseleave.graph", () => {
         hoveredNode = null;
+        localHoveredEdgeIds = new Set();
         latestRef.current.onNodeHoverChange?.(null);
         latestRef.current.onEdgeHoverChange?.([]);
         latestRef.current.onNodeHoverPositionChange?.(null);
@@ -221,6 +239,8 @@ export default function GraphViewD3({
       width = Math.max(parentBounds.width || resizeTarget.clientWidth || 640, 1);
       height = Math.max(parentBounds.height || resizeTarget.clientHeight || 400, 1);
 
+      refreshStyles();
+
       const pixelRatio = window.devicePixelRatio || 1;
       canvas.width = Math.floor(width * pixelRatio);
       canvas.height = Math.floor(height * pixelRatio);
@@ -245,17 +265,13 @@ export default function GraphViewD3({
 
     function render() {
       if (!canvas) return;
-      const pixelRatio = window.devicePixelRatio || 1;
-      const styles = getComputedStyle(canvas);
-      const textColor = styles.color || "#111827";
-      const labelBackground = styles.getPropertyValue("--background").trim() || "#ffffff";
-
       if (!context) return;
+      const pixelRatio = window.devicePixelRatio || 1;
       const nodes = nodesRef.current;
       const edges = edgesRef.current;
       const focus = getFocusState({
         edges,
-        hoveredEdgeIds: latestRef.current.hoveredEdgeIds,
+        hoveredEdgeIds: localHoveredEdgeIds,
         hoveredNode,
         hoveredNodeId: latestRef.current.hoveredNodeId,
         nodes,
@@ -270,7 +286,7 @@ export default function GraphViewD3({
         edges,
         focus,
         height,
-        hoveredEdgeIds: latestRef.current.hoveredEdgeIds,
+        hoveredEdgeIds: localHoveredEdgeIds,
         hoveredNode,
         hoveredNodeId: latestRef.current.hoveredNodeId,
         labelBackground,
@@ -302,6 +318,7 @@ export default function GraphViewD3({
       edgesRef.current = [];
       edgePairCountsRef.current = new Map();
       labelZoomThresholdsRef.current = new Map();
+      nodeEdgeMapRef.current = new Map();
       topologySignatureRef.current = { nodes: "", edges: "" };
       simulationRef.current?.nodes(nodesRef.current);
       const linkForce = simulationRef.current?.force<d3.ForceLink<GraphNode, GraphEdge>>("link");
@@ -335,9 +352,21 @@ export default function GraphViewD3({
       nextTopologySignature.nodes !== topologySignatureRef.current.nodes ||
       nextTopologySignature.edges !== topologySignatureRef.current.edges;
 
+    // Build adjacency map: nodeFqdn → [edgeId, ...] for O(1) hover lookups.
+    const nodeEdgeMap = new Map<string, string[]>();
+    for (const edge of nextEdges) {
+      const src = edge.source_fqdn;
+      const tgt = edge.target_fqdn;
+      if (!nodeEdgeMap.has(src)) nodeEdgeMap.set(src, []);
+      if (!nodeEdgeMap.has(tgt)) nodeEdgeMap.set(tgt, []);
+      nodeEdgeMap.get(src)!.push(edge.id);
+      nodeEdgeMap.get(tgt)!.push(edge.id);
+    }
+
     nodesRef.current = nextNodes;
     edgesRef.current = nextEdges;
     edgePairCountsRef.current = edgePairCounts;
+    nodeEdgeMapRef.current = nodeEdgeMap;
     labelZoomThresholdsRef.current = buildLabelZoomThresholds(nextNodes, connectionCountByNode);
     topologySignatureRef.current = nextTopologySignature;
 
