@@ -255,7 +255,7 @@ BEGIN
                         WHEN n.target_port BETWEEN n.target_ephemeral_port_start AND n.target_ephemeral_port_end
                          AND n.source_port NOT BETWEEN n.source_ephemeral_port_start AND n.source_ephemeral_port_end
                         THEN n.source_port
-                        ELSE n.target_port
+                        ELSE CASE WHEN n.source_port <= n.target_port THEN n.source_port ELSE n.target_port END
                     END
             FROM normalized_resolved n
         ),

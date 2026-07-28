@@ -10,6 +10,7 @@ SELECT
     o.description,
     source_table = CAST('ports_override' AS nvarchar(20))
 FROM dbo.ports_override o
+WHERE o.service_name NOT IN ('Unassigned', 'discard')
 
 UNION ALL
 
@@ -20,7 +21,8 @@ SELECT
     p.description,
     source_table = CAST('ports' AS nvarchar(20))
 FROM dbo.ports p
-WHERE NOT EXISTS (
+WHERE p.service_name NOT IN ('Unassigned', 'discard')
+  AND NOT EXISTS (
     SELECT 1
     FROM dbo.ports_override o
     WHERE o.port_number = p.port_number
