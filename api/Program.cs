@@ -60,7 +60,7 @@ app.MapHealthChecks("/");
 
 app.MapGet(
     "/api/graph",
-    async (string? lastSeen, long? lastEdgeId, long? lastNodeId, GraphService graphService) =>
+    async (string? lastSeen, long? lastEdgeId, long? lastNodeId, bool? excludeIsolated, int? minLastSeenHours, GraphService graphService) =>
     {
         var correct = DateTime.TryParse(
             lastSeen,
@@ -78,12 +78,13 @@ app.MapGet(
         }
 
         var cursor = new GraphCursor(parsedLastSeen, lastEdgeId ?? 0, lastNodeId ?? 0);
+        var queryParams = new GraphQueryParams(ExcludeIsolated: excludeIsolated ?? false, MinLastSeenHours: minLastSeenHours);
 
-        return await graphService.GetGraphAsync(cursor);
+        return await graphService.GetGraphAsync(cursor, queryParams: queryParams);
     }
 );
 
-app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? lastSeen, long? lastEdgeId, long? lastNodeId, GraphService graphService) =>
+app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? lastSeen, long? lastEdgeId, long? lastNodeId, bool? excludeIsolated, int? minLastSeenHours, GraphService graphService) =>
 {
     var correct = DateTime.TryParse(
         lastSeen,
@@ -101,6 +102,7 @@ app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? la
     }
 
     var cursor = new GraphCursor(parsedLastSeen, lastEdgeId ?? 0, lastNodeId ?? 0);
+    var queryParams = new GraphQueryParams(ExcludeIsolated: excludeIsolated ?? false, MinLastSeenHours: minLastSeenHours);
     app.Logger.LogInformation(
         "Received request for customer {0} with cursor: lastSeen={1}, lastEdgeId={2}, lastNodeId={3}",
         customerId,
@@ -109,8 +111,40 @@ app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? la
         lastNodeId ?? 0
     );
 
-    return await graphService.GetGraphAsync(cursor, customerId);
+    return await graphService.GetGraphAsync(cursor, customerId, queryParams);
 });
+
+app.MapGet(
+    "/api/node",
+    async (string ciid, GraphService graphService) =>
+    {
+        if (string.IsNullOrWhiteSpace(ciid))
+            return Results.BadRequest("ciid is required");
+
+        var details = await graphService.GetNodeDetailsAsync(ciid);
+        return details is null ? Results.NotFound() : Results.Ok(details);
+    }
+);
+
+app.MapGet(
+    "/api/nodes/filter",
+    async (string? customer, string? ip, string? mac,
+           string? firstSeenAfter, string? firstSeenBefore,
+           string? lastSeenAfter, string? lastSeenBefore,
+           GraphService graphService) =>
+    {
+        DateTime? ParseDate(string? value) =>
+            value != null && DateTime.TryParse(value, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dt) ? dt : null;
+
+        var ciids = await graphService.FilterNodeCiidsAsync(
+            customer, ip, mac,
+            ParseDate(firstSeenAfter), ParseDate(firstSeenBefore),
+            ParseDate(lastSeenAfter), ParseDate(lastSeenBefore));
+
+        return Results.Ok(ciids);
+    }
+);
 
 app.MapGet(
     "/api/customers",

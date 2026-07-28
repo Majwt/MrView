@@ -37,12 +37,8 @@ function nodeMatchesSearch(node: GraphNode, query: string) {
   const values = [
     node.fqdn,
     node.hostname,
-    node.customer.name,
     String(node.distinct_edge),
     String(node.connection_count),
-    node.first_seen,
-    node.last_seen,
-    ...node.interfaces.flatMap((netInterface) => [netInterface.ip, netInterface.mac]),
   ];
 
   return values.some((value) => String(value ?? "").toLowerCase().includes(query));

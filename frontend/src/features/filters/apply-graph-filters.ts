@@ -68,32 +68,13 @@ function nodeMatchesRule(node: GraphNode, rule: FilterRule): boolean {
     case "hostname":
       return matches(node.hostname, rule);
 
-    case "ip":
-      return matchesAnyValue(
-        node.interfaces.map((netInterface) => netInterface.ip),
-        rule,
-      );
-
-    case "mac":
-      return matchesAnyValue(
-        node.interfaces.map((netInterface) => netInterface.mac),
-        rule,
-      );
-
-    case "customer":
-      return matches(node.customer.name, rule);
+    // ip, mac, customer, first_seen, last_seen are server-side filters (nodes lack these fields in the graph response)
 
     case "distinct_edges":
       return matches(node.distinct_edge, rule);
 
     case "connections":
       return matches(node.connection_count, rule);
-
-    case "first_seen":
-      return matches(node.first_seen, rule);
-
-    case "last_seen":
-      return matches(node.last_seen, rule);
 
     default:
       return true;

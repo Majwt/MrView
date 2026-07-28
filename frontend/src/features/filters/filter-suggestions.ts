@@ -32,11 +32,11 @@ export function buildFilterSuggestions(snapshot: GraphSnapshot | null): FilterSu
     add("fqdn", node.fqdn);
     add("hostname", node.hostname);
 
-    if (!node.is_placeholder && node.customer.name !== "Unknown") {
+    if (!node.is_placeholder && node.customer && node.customer.name !== "Unknown") {
       add("customer", node.customer.name);
     }
 
-    for (const netInterface of node.interfaces) {
+    for (const netInterface of node.interfaces ?? []) {
       add("ip", netInterface.ip);
       add("mac", netInterface.mac);
     }

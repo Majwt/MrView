@@ -5,11 +5,15 @@ import type { ReactNode } from "react";
 
 export default function NodeDetailsPanel({
   node,
+  isLoadingDetails,
   onBack,
 }: {
   node: NonNullable<GraphSnapshot["nodes"][number]>;
+  isLoadingDetails?: boolean;
   onBack: () => void;
 }) {
+  const hasDetails = node.customer !== undefined;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 gap-4">
 
@@ -17,7 +21,9 @@ export default function NodeDetailsPanel({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate font-mono text-sm font-semibold">{node.fqdn}</p>
-          <p className="text-xs text-muted-foreground">{node.customer.name || "Unknown customer"}</p>
+          <p className="text-xs text-muted-foreground">
+            {hasDetails ? (node.customer!.name || "Unknown customer") : node.hostname}
+          </p>
         </div>
         <button
           type="button"
@@ -30,16 +36,20 @@ export default function NodeDetailsPanel({
       </div>
 
       {/* CmdbCiId — highlighted */}
-      {node.customer.cmdb_ci_id ? (
-        <div className="rounded-md border-2 bg-muted/30 px-3 py-2">
-          <div className="mb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">CMDB CI ID</div>
-          <span className="font-mono text-sm font-semibold">{node.customer.cmdb_ci_id}</span>
-        </div>
-      ) : (
-        <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-          No CMDB CI ID
-        </div>
-      )}
+      {isLoadingDetails && !hasDetails ? (
+        <div className="h-10 animate-pulse rounded-md bg-muted" />
+      ) : hasDetails ? (
+        node.customer!.cmdb_ci_id ? (
+          <div className="rounded-md border-2 bg-muted/30 px-3 py-2">
+            <div className="mb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">CMDB CI ID</div>
+            <span className="font-mono text-sm font-semibold">{node.customer!.cmdb_ci_id}</span>
+          </div>
+        ) : (
+          <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            No CMDB CI ID
+          </div>
+        )
+      ) : null}
 
       {/* Activity */}
       <div>
@@ -50,24 +60,33 @@ export default function NodeDetailsPanel({
           <Stat label="Distinct Connections" value={node.distinct_edge} />
           <Stat label="Total Connections" value={node.connection_count} />
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <LabelValue label="Last Seen">
-            <RichDateCell value={node.last_seen} />
-          </LabelValue>
-          <LabelValue label="First Seen">
-            <RichDateCell value={node.first_seen} />
-          </LabelValue>
-        </div>
+        {isLoadingDetails && !hasDetails ? (
+          <div className="mt-2 h-10 animate-pulse rounded-md bg-muted" />
+        ) : hasDetails ? (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <LabelValue label="Last Seen">
+              <RichDateCell value={node.last_seen!} />
+            </LabelValue>
+            <LabelValue label="First Seen">
+              <RichDateCell value={node.first_seen!} />
+            </LabelValue>
+          </div>
+        ) : null}
       </div>
 
       {/* Interfaces */}
-      {node.interfaces.length > 0 && (
+      {isLoadingDetails && !hasDetails ? (
+        <div className="space-y-2">
+          <div className="h-3 w-20 animate-pulse rounded bg-muted" />
+          <div className="h-16 animate-pulse rounded-md bg-muted" />
+        </div>
+      ) : (node.interfaces ?? []).length > 0 ? (
         <div>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Interfaces
           </h3>
           <div className="flex flex-col gap-2">
-            {node.interfaces.map((intf, index) => (
+            {node.interfaces!.map((intf, index) => (
               <div
                 key={`${intf.ip}-${index}`}
                 className="rounded-md border bg-muted/20 px-3 py-2 text-xs"
@@ -87,7 +106,7 @@ export default function NodeDetailsPanel({
             ))}
           </div>
         </div>
-      )}
+      ) : null}
 
     </div>
   );

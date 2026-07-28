@@ -18,12 +18,13 @@ export type GraphNode = d3.SimulationNodeDatum & {
   id: string;
   fqdn: string;
   hostname: string;
-  interfaces: NetInterface[];
+  ciid?: string;
+  interfaces?: NetInterface[];
   distinct_edge: number;
   connection_count: number;
-  customer: Customer;
-  first_seen: string;
-  last_seen: string;
+  customer?: Customer;
+  first_seen?: string;
+  last_seen?: string;
   is_placeholder?: boolean;
   x: number;
   y: number;

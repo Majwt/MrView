@@ -12,58 +12,76 @@ public class GraphService
         db = _db;
     }
 
-    /**
-     * Gets the graph without a cursor. This method is intended for initial graph retrieval when the client does not have a cursor yet. It retrieves all nodes and edges for the specified customer ID. If no customer ID is provided, it return the whole graph.
-     * @param customerId The ID of the customer for whom to get the graph.
-     * @returns A task that represents the asynchronous operation. The task result contains the graph response.
-     */
-
-    public async Task<GraphResponse> GetGraphAsync(int customerId = -1)
+    public async Task<GraphResponse> GetGraphAsync(int customerId = -1, GraphQueryParams? queryParams = null)
     {
         var cursor = new GraphCursor(DateTime.UnixEpoch, 0, 0);
-        return await GetGraphAsync(cursor, customerId);
+        return await GetGraphAsync(cursor, customerId, queryParams);
     }
 
-    public async Task<GraphResponse> GetGraphAsync(GraphCursor cursor, int customerId = -1)
+    public async Task<GraphResponse> GetGraphAsync(GraphCursor cursor, int customerId = -1, GraphQueryParams? queryParams = null)
     {
+        var qp = queryParams ?? new GraphQueryParams();
 
         Task<IEnumerable<EdgeEntity>> dbEdgesTask;
-        Task<IEnumerable<NodeEntity>> dbNodesTask;
+        Task<IEnumerable<NodeSummaryEntity>> dbNodesTask;
+
         if (customerId == -1)
         {
             dbEdgesTask = db.getEdgesAsync(cursor);
-            dbNodesTask = db.getNodesAsync(cursor);
+            dbNodesTask = db.getNodeSummariesAsync(cursor, qp);
         }
         else
         {
             dbEdgesTask = db.getCustomerEdgesAsync(cursor, customerId);
-            dbNodesTask = db.getCustomerNodesAsync(cursor, customerId);
+            dbNodesTask = db.getCustomerNodeSummariesAsync(cursor, customerId, qp);
         }
 
         await Task.WhenAll(dbEdgesTask, dbNodesTask);
         var dbNodes = dbNodesTask.Result;
         var dbEdges = dbEdgesTask.Result;
 
-        var nodes = ToNodeDtos(dbNodes);
-
+        var nodes = ToNodeSummaryDtos(dbNodes);
         var edges = ToEdgeDtos(dbEdges);
-
-
-
-        var nextCursor = getNextCursor(cursor,dbNodes, dbEdges);
+        var nextCursor = GetNextCursor(cursor, dbNodes, dbEdges);
 
         return new GraphResponse(
             nodes,
             edges,
-            new List<string>(), // Not implemented
-            new List<string>(), // Not implemented
+            new List<string>(),
+            new List<string>(),
             nextCursor
         );
     }
 
-    private static IEnumerable<NodeDto> ToNodeDtos(IEnumerable<NodeEntity> nodes)
+    public async Task<NodeDto?> GetNodeDetailsAsync(string ciid)
     {
-        return nodes.Select(n => new NodeDto(
+        var entity = await db.getNodeByCiidAsync(ciid);
+        if (entity == null) return null;
+        return ToNodeDto(entity);
+    }
+
+    public async Task<IEnumerable<string>> FilterNodeCiidsAsync(
+        string? customer, string? ip, string? mac,
+        DateTime? firstSeenAfter, DateTime? firstSeenBefore,
+        DateTime? lastSeenAfter, DateTime? lastSeenBefore)
+    {
+        return await db.filterNodeCiidsAsync(customer, ip, mac, firstSeenAfter, firstSeenBefore, lastSeenAfter, lastSeenBefore);
+    }
+
+    private static IEnumerable<NodeSummaryDto> ToNodeSummaryDtos(IEnumerable<NodeSummaryEntity> nodes)
+    {
+        return nodes.Select(n => new NodeSummaryDto(
+            n.Ciid,
+            n.Fqdn,
+            n.Hostname,
+            n.DistinctEdge,
+            n.ConnectionCount
+        ));
+    }
+
+    private static NodeDto ToNodeDto(NodeEntity n)
+    {
+        return new NodeDto(
             n.Id,
             n.Fqdn,
             n.Hostname,
@@ -73,62 +91,47 @@ public class GraphService
             n.Customer,
             n.FirstSeen,
             n.LastSeen
-        ));
+        );
     }
 
     private static IEnumerable<EdgeDto> ToEdgeDtos(IEnumerable<EdgeEntity> edges)
     {
-        var dtos = new List<EdgeDto>();
-
-        edges
-            .ToList()
-            .ForEach(e =>
-                dtos.Add(
-                    new EdgeDto(
-                        e.EdgeKey,
-                        e.ServiceName,
-                        e.SourceIp,
-                        e.SourcePort,
-                        e.SourceFqdn,
-                        e.SourcePid,
-                        e.SourceProcessName,
-                        e.TargetIp,
-                        e.TargetPort,
-                        e.TargetFqdn,
-                        e.TargetPid,
-                        e.TargetProcessName,
-                        e.SeenCount,
-                        e.LastSeen,
-                        e.FirstSeen
-                    )
-                )
-            );
-        return dtos;
+        return edges.Select(e => new EdgeDto(
+            e.EdgeKey,
+            e.ServiceName,
+            e.SourceIp,
+            e.SourcePort,
+            e.SourceFqdn,
+            e.SourcePid,
+            e.SourceProcessName,
+            e.TargetIp,
+            e.TargetPort,
+            e.TargetFqdn,
+            e.TargetPid,
+            e.TargetProcessName,
+            e.SeenCount,
+            e.LastSeen,
+            e.FirstSeen
+        ));
     }
 
-    private GraphCursor getNextCursor(
+    private GraphCursor GetNextCursor(
         GraphCursor currentCursor,
-        IEnumerable<NodeEntity> nodes,
+        IEnumerable<NodeSummaryEntity> nodes,
         IEnumerable<EdgeEntity> edges
     )
     {
-        var maxNodeId = nodes.Any() ? nodes.Max(n => n.Id) : 0;
+        var maxNodeId = nodes.Any() ? nodes.Max(n => n.NodeId) : 0;
         var maxEdgeId = edges.Any() ? edges.Max(e => e.Id) : 0;
-        var lastSeenNode = nodes.OrderByDescending(e => e.LastSeen).FirstOrDefault();
+        var lastSeenNode = nodes.OrderByDescending(n => n.LastSeen).FirstOrDefault();
         var lastSeenEdge = edges.OrderByDescending(e => e.LastSeen).FirstOrDefault();
 
         var lastSeen =
             lastSeenNode != null && lastSeenEdge != null
-                ? (
-                    lastSeenNode.LastSeen > lastSeenEdge.LastSeen
-                        ? lastSeenNode.LastSeen
-                        : lastSeenEdge.LastSeen
-                )
-                : (
-                    lastSeenNode != null
-                        ? lastSeenNode.LastSeen
-                        : (lastSeenEdge != null ? lastSeenEdge.LastSeen : DateTime.UnixEpoch)
-                );
+                ? (lastSeenNode.LastSeen > lastSeenEdge.LastSeen ? lastSeenNode.LastSeen : lastSeenEdge.LastSeen)
+                : (lastSeenNode != null ? lastSeenNode.LastSeen
+                    : (lastSeenEdge != null ? lastSeenEdge.LastSeen : DateTime.UnixEpoch));
+
         var maxLastSeen = currentCursor.LastSeen > lastSeen ? currentCursor.LastSeen : lastSeen;
         var maxMaxEdgeId = currentCursor.LastSeen == maxLastSeen ? Math.Max(currentCursor.LastSeenEdgeId, maxEdgeId) : maxEdgeId;
         var maxMaxNodeId = currentCursor.LastSeen == maxLastSeen ? Math.Max(currentCursor.LastSeenNodeId, maxNodeId) : maxNodeId;

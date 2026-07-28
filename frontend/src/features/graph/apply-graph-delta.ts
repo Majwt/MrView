@@ -14,7 +14,9 @@ export function applyGraphDelta(current: GraphSnapshot, delta: GraphDelta): Grap
   }
 
   for (const node of delta.upsert_nodes) {
-    nodesByFqdn.set(node.fqdn, node);
+    // Merge with existing node to preserve lazily-loaded details (interfaces, customer, etc.)
+    const existing = nodesByFqdn.get(node.fqdn);
+    nodesByFqdn.set(node.fqdn, existing ? { ...existing, ...node } : node);
   }
 
   for (const edgeId of removeEdgeIds) {
