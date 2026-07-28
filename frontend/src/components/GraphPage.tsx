@@ -10,6 +10,7 @@ import { readUrlState, writeUrlState } from "@/features/url-state";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
 import FilterBar from "./FilterBar";
+import GraphQuickFilters, { type QuickFilters } from "./GraphQuickFilters";
 import GraphViewD3 from "./GraphViewD3";
 import NodeDetailsPanel from "./NodeDetailsPanel";
 import { type TableConnection, connectionColumns } from "./table/connection-columns";
@@ -48,6 +49,10 @@ export default function GraphPage() {
   }, []);
   const [hoveredConnectionIds, setHoveredConnectionIds] = useState<Set<string>>(() => new Set());
   const [globalSearch, setGlobalSearch] = useState(initialUrlState.globalSearch);
+  const [quickFilters, setQuickFilters] = useState<QuickFilters>({
+    hideIsolatedNodes: false,
+    staleThresholdHours: null,
+  });
 
   const [, startTransition] = useTransition();
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialUrlState.filters);
@@ -63,7 +68,32 @@ export default function GraphPage() {
     [connectionFilteredSnapshot, globalSearch],
   );
 
-  const graphSnapshot = connectionSearchedSnapshot;
+  const graphSnapshot = useMemo(() => {
+    if (!connectionSearchedSnapshot) return connectionSearchedSnapshot;
+    let { nodes, edges, cursor } = connectionSearchedSnapshot;
+
+    if (quickFilters.hideIsolatedNodes) {
+      const connectedFqdns = new Set<string>();
+      for (const edge of edges) {
+        connectedFqdns.add(edge.source_fqdn);
+        connectedFqdns.add(edge.target_fqdn);
+      }
+      nodes = nodes.filter((n) => connectedFqdns.has(n.fqdn));
+    }
+
+    if (quickFilters.staleThresholdHours !== null) {
+      const cutoff = Date.now() - quickFilters.staleThresholdHours * 60 * 60 * 1000;
+      const freshFqdns = new Set(
+        nodes.filter((n) => new Date(n.last_seen).getTime() >= cutoff).map((n) => n.fqdn),
+      );
+      nodes = nodes.filter((n) => freshFqdns.has(n.fqdn));
+      edges = edges.filter(
+        (e) => freshFqdns.has(e.source_fqdn) && freshFqdns.has(e.target_fqdn),
+      );
+    }
+
+    return { nodes, edges, cursor };
+  }, [connectionSearchedSnapshot, quickFilters]);
 
   const visibleNodeIds = useMemo(
     () => new Set(graphSnapshot?.nodes.map((node) => node.fqdn) ?? []),
@@ -214,6 +244,15 @@ export default function GraphPage() {
 
           <section className="relative flex min-h-0 border-b">
             <div className="relative flex-1 min-h-0">
+              <GraphQuickFilters
+                quickFilters={quickFilters}
+                onToggleIsolated={() =>
+                  setQuickFilters((prev) => ({ ...prev, hideIsolatedNodes: !prev.hideIsolatedNodes }))
+                }
+                onSetStaleThreshold={(days) =>
+                  setQuickFilters((prev) => ({ ...prev, staleThresholdHours: days }))
+                }
+              />
               {snapshot ? (
                 <GraphViewD3
                   graphData={snapshot}

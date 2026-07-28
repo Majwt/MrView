@@ -117,12 +117,12 @@ BEGIN
 
                 source_fqdn = CASE WHEN b.direction = 'INCOMING' THEN b.target_fqdn_raw ELSE b.source_fqdn_raw END,
                 source_ipv4 = CASE WHEN b.direction = 'INCOMING' THEN b.target_address_ipv4 ELSE b.source_address_ipv4 END,
-                source_ciid_base = CASE WHEN b.direction = 'INCOMING' THEN b.target_ciid_raw ELSE b.source_ciid_raw END,
+                source_ciid_base = b.source_ciid_raw,
                 source_port = CASE WHEN b.direction = 'INCOMING' THEN b.target_port_raw ELSE b.source_port_raw END,
 
                 target_fqdn = CASE WHEN b.direction = 'INCOMING' THEN b.source_fqdn_raw ELSE b.target_fqdn_raw END,
                 target_ipv4 = CASE WHEN b.direction = 'INCOMING' THEN b.source_address_ipv4 ELSE b.target_address_ipv4 END,
-                target_ciid_base = CASE WHEN b.direction = 'INCOMING' THEN b.source_ciid_raw ELSE b.target_ciid_raw END,
+                target_ciid_base = b.target_ciid_raw,
                 target_port = CASE WHEN b.direction = 'INCOMING' THEN b.source_port_raw ELSE b.target_port_raw END,
 
                 source_ephemeral_port_start = CASE WHEN b.direction = 'INCOMING' THEN b.target_ephemeral_port_start_raw ELSE b.source_ephemeral_port_start_raw END,
