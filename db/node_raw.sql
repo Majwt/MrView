@@ -21,8 +21,6 @@ CREATE TABLE dbo.node_raw (
     DateAdded datetime2(0) NOT NULL,
 
     CONSTRAINT PK_node_raw PRIMARY KEY (id),
-    CONSTRAINT FK_node_raw_managed_node
-        FOREIGN KEY (ciid) REFERENCES dbo.managed_node(ciid),
     CONSTRAINT CK_node_raw_ephemeral_range
         CHECK (
             ephemeral_port_start IS NULL

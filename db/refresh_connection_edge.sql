@@ -14,11 +14,11 @@ BEGIN
 
         ;WITH latest_node_raw AS (
             SELECT
-                nr.ciid,
+                ciid = NULLIF(LTRIM(RTRIM(nr.ciid)), ''),
                 nr.ephemeral_port_start,
                 nr.ephemeral_port_end,
                 rn = ROW_NUMBER() OVER (
-                    PARTITION BY nr.ciid
+                    PARTITION BY NULLIF(LTRIM(RTRIM(nr.ciid)), '')
                     ORDER BY nr.DateAdded DESC, nr.id DESC
                 )
             FROM dbo.node_raw nr
@@ -33,14 +33,21 @@ BEGIN
         ),
         managed_lookup AS (
             SELECT
-                ciid,
-                fqdn = LOWER(fqdn)
+                ciid = NULLIF(LTRIM(RTRIM(ciid)), ''),
+                fqdn = LOWER(LTRIM(RTRIM(fqdn))),
+                short_name = LOWER(
+                    CASE
+                        WHEN CHARINDEX('.', LTRIM(RTRIM(fqdn))) > 0
+                        THEN LEFT(LTRIM(RTRIM(fqdn)), CHARINDEX('.', LTRIM(RTRIM(fqdn))) - 1)
+                        ELSE LTRIM(RTRIM(fqdn))
+                    END
+                )
             FROM dbo.managed_node
-            WHERE fqdn IS NOT NULL
+            WHERE NULLIF(LTRIM(RTRIM(fqdn)), '') IS NOT NULL
         ),
         interface_lookup AS (
             SELECT
-                ni.ciid,
+                ciid = NULLIF(LTRIM(RTRIM(ni.ciid)), ''),
                 ni.address_ipv4,
                 rn = ROW_NUMBER() OVER (
                     PARTITION BY ni.address_ipv4
@@ -65,8 +72,8 @@ BEGIN
 
                 source_fqdn_raw = COALESCE(source_alias.canonical_fqdn, LOWER(COALESCE(source_match.fqdn, r.source_fqdn))),
                 r.source_address_ipv4,
-                source_ciid_raw = r.reporter_ciid,
-                reporter_ciid = r.reporter_ciid,
+                source_ciid_raw = NULLIF(LTRIM(RTRIM(r.reporter_ciid)), ''),
+                reporter_ciid = NULLIF(LTRIM(RTRIM(r.reporter_ciid)), ''),
                 source_port_raw = r.source_port,
 
                 target_fqdn_raw = COALESCE(target_alias.canonical_fqdn, LOWER(r.target_fqdn)),
@@ -83,12 +90,12 @@ BEGIN
                 target_ephemeral_port_end_raw = 65535
             FROM dbo.connection_raw r
             LEFT JOIN node_ranges source_range
-                ON source_range.ciid = r.reporter_ciid
+                ON source_range.ciid = NULLIF(LTRIM(RTRIM(r.reporter_ciid)), '')
             OUTER APPLY (
                 SELECT TOP (1)
                     ni.fqdn
                 FROM dbo.node_interface ni
-                WHERE ni.ciid = r.reporter_ciid
+                WHERE ni.ciid = NULLIF(LTRIM(RTRIM(r.reporter_ciid)), '')
                                     AND ni.address_ipv4 = r.source_address_ipv4
                 ORDER BY
                     ni.last_seen DESC
@@ -129,13 +136,13 @@ BEGIN
                 n.id,
                 n.DateAdded,
                 n.protocol,
-                n.source_fqdn,
+                source_fqdn = COALESCE(src_resolved_node.fqdn, n.source_fqdn),
                 n.source_ipv4,
-                source_ciid = COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base),
+                source_ciid = resolved.source_ciid,
                 n.source_port,
-                n.target_fqdn,
+                target_fqdn = COALESCE(tgt_resolved_node.fqdn, n.target_fqdn),
                 n.target_ipv4,
-                target_ciid = COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base),
+                target_ciid = resolved.target_ciid,
                 n.target_port,
                 n.source_ephemeral_port_start,
                 n.source_ephemeral_port_end,
@@ -143,59 +150,94 @@ BEGIN
                 n.target_ephemeral_port_end,
                 endpoint_a_process_name =
                     CASE
-                        WHEN COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base) = n.reporter_ciid
-                         AND ISNULL(COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base), '') <> n.reporter_ciid
+                        WHEN resolved.source_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.target_ciid, '') <> n.reporter_ciid
                         THEN n.process_name
-                        WHEN COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base) = n.reporter_ciid
-                         AND ISNULL(COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base), '') <> n.reporter_ciid
+                        WHEN resolved.target_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.source_ciid, '') <> n.reporter_ciid
                         THEN NULL
                         WHEN n.direction = 'INCOMING' THEN NULL
                         ELSE n.process_name
                     END,
                 endpoint_a_process_id =
                     CASE
-                        WHEN COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base) = n.reporter_ciid
-                         AND ISNULL(COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base), '') <> n.reporter_ciid
+                        WHEN resolved.source_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.target_ciid, '') <> n.reporter_ciid
                         THEN n.process_id
-                        WHEN COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base) = n.reporter_ciid
-                         AND ISNULL(COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base), '') <> n.reporter_ciid
+                        WHEN resolved.target_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.source_ciid, '') <> n.reporter_ciid
                         THEN NULL
                         WHEN n.direction = 'INCOMING' THEN NULL
                         ELSE n.process_id
                     END,
                 endpoint_b_process_name =
                     CASE
-                        WHEN COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base) = n.reporter_ciid
-                         AND ISNULL(COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base), '') <> n.reporter_ciid
+                        WHEN resolved.target_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.source_ciid, '') <> n.reporter_ciid
                         THEN n.process_name
-                        WHEN COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base) = n.reporter_ciid
-                         AND ISNULL(COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base), '') <> n.reporter_ciid
+                        WHEN resolved.source_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.target_ciid, '') <> n.reporter_ciid
                         THEN NULL
                         WHEN n.direction = 'INCOMING' THEN n.process_name
                         ELSE NULL
                     END,
                 endpoint_b_process_id =
                     CASE
-                        WHEN COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base) = n.reporter_ciid
-                         AND ISNULL(COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base), '') <> n.reporter_ciid
+                        WHEN resolved.target_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.source_ciid, '') <> n.reporter_ciid
                         THEN n.process_id
-                        WHEN COALESCE(src_node.ciid, src_iface.ciid, n.source_ciid_base) = n.reporter_ciid
-                         AND ISNULL(COALESCE(tgt_node.ciid, tgt_iface.ciid, n.target_ciid_base), '') <> n.reporter_ciid
+                        WHEN resolved.source_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.target_ciid, '') <> n.reporter_ciid
                         THEN NULL
                         WHEN n.direction = 'INCOMING' THEN n.process_id
                         ELSE NULL
                     END
             FROM normalized n
-            LEFT JOIN managed_lookup src_node
-                ON src_node.fqdn = n.source_fqdn
-            LEFT JOIN managed_lookup tgt_node
-                ON tgt_node.fqdn = n.target_fqdn
+            OUTER APPLY (
+                SELECT TOP (1)
+                    ml.ciid,
+                    ml.fqdn
+                FROM managed_lookup ml
+                WHERE ml.fqdn = n.source_fqdn
+                   OR ml.short_name = n.source_fqdn
+                ORDER BY
+                    CASE WHEN ml.fqdn = n.source_fqdn THEN 0 ELSE 1 END,
+                    CASE WHEN ml.fqdn LIKE '%.%' THEN 0 ELSE 1 END
+            ) src_node
+            OUTER APPLY (
+                SELECT TOP (1)
+                    ml.ciid,
+                    ml.fqdn
+                FROM managed_lookup ml
+                WHERE ml.fqdn = n.target_fqdn
+                   OR ml.short_name = n.target_fqdn
+                ORDER BY
+                    CASE WHEN ml.fqdn = n.target_fqdn THEN 0 ELSE 1 END,
+                    CASE WHEN ml.fqdn LIKE '%.%' THEN 0 ELSE 1 END
+            ) tgt_node
             LEFT JOIN interface_lookup src_iface
                 ON src_iface.address_ipv4 = n.source_ipv4
                AND src_iface.rn = 1
             LEFT JOIN interface_lookup tgt_iface
                 ON tgt_iface.address_ipv4 = n.target_ipv4
                AND tgt_iface.rn = 1
+            OUTER APPLY (
+                SELECT
+                    source_ciid = COALESCE(
+                        src_node.ciid,
+                        CASE WHEN NULLIF(LTRIM(RTRIM(n.source_fqdn)), '') IS NULL THEN src_iface.ciid END,
+                        n.source_ciid_base
+                    ),
+                    target_ciid = COALESCE(
+                        tgt_node.ciid,
+                        CASE WHEN NULLIF(LTRIM(RTRIM(n.target_fqdn)), '') IS NULL THEN tgt_iface.ciid END,
+                        n.target_ciid_base
+                    )
+            ) resolved
+            LEFT JOIN managed_lookup src_resolved_node
+                ON src_resolved_node.ciid = resolved.source_ciid
+            LEFT JOIN managed_lookup tgt_resolved_node
+                ON tgt_resolved_node.ciid = resolved.target_ciid
         ),
         keyed AS (
             SELECT

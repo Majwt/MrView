@@ -20,8 +20,7 @@ CREATE TABLE dbo.node_interface_raw (
     DateAdded datetime2(0) NOT NULL,
 
     CONSTRAINT PK_node_interface_raw PRIMARY KEY (id),
-    CONSTRAINT FK_node_interface_raw_managed_node
-        FOREIGN KEY (ciid) REFERENCES dbo.managed_node(ciid),
+
     CONSTRAINT CK_node_interface_raw_has_ip
         CHECK (
             (address_ipv4 IS NOT NULL AND address_ipv4 <> '')

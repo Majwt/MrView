@@ -120,7 +120,7 @@ BEGIN
                 END
         FROM ranked r
         WHERE r.rn = 1
-          AND r.evidence_count >= 3
+                    AND r.evidence_count >= 2
           AND (r.next_evidence IS NULL OR r.evidence_count >= (r.next_evidence * 2))
     ),
     unique_hostname_fallback AS (
@@ -139,7 +139,7 @@ BEGIN
             ON s.alias_name = c.alias_name
            AND s.canonical_fqdn = c.canonical_fqdn
         WHERE s.alias_name IS NULL
-          AND aa.evidence_count >= 3
+                    AND aa.evidence_count >= 1
     ),
     final_winners AS (
         SELECT alias_name, canonical_fqdn, evidence_count, confidence

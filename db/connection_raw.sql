@@ -26,8 +26,6 @@ CREATE TABLE dbo.connection_raw (
     DateAdded datetime2(0) NOT NULL,
 
     CONSTRAINT PK_connection_raw PRIMARY KEY (id),
-    CONSTRAINT FK_connection_raw_managed_node
-        FOREIGN KEY (reporter_ciid) REFERENCES dbo.managed_node(ciid),
     CONSTRAINT CK_connection_raw_source_port
         CHECK (source_port IS NULL OR (source_port BETWEEN 0 AND 65535)),
     CONSTRAINT CK_connection_raw_target_port

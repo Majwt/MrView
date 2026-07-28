@@ -99,10 +99,10 @@ public class Db
                 ORDER BY CASE WHEN p.protocol = e.protocol THEN 0 ELSE 1 END
             ) ps
             WHERE e.seen_count > @SeenCountThreshold
-              AND (
-                  na.is_active = 1
-                  OR nb.is_active = 1
-              )
+              -- AND (
+              --     na.is_active = 1
+              --     OR nb.is_active = 1
+              -- )
               AND (
                     e.last_seen > @LastSeen
                     OR (
@@ -167,10 +167,10 @@ public class Db
                     na.group_id = @CustomerId
                     OR nb.group_id = @CustomerId
               )
-              AND (
-                  na.is_active = 1
-                  OR nb.is_active = 1
-              )
+              -- AND (
+              --    na.is_active = 1
+              --    OR nb.is_active = 1
+              -- )
               AND (
                     e.last_seen > @LastSeen
                     OR (
@@ -418,7 +418,7 @@ public class Db
                         FOR JSON PATH
                     )
                 FROM {_interfacesTable} ni
-                WHERE ni.is_active = 1
+                -- WHERE ni.is_active = 1
                 GROUP BY ni.ciid
             ),
             edge_agg AS (
@@ -459,7 +459,7 @@ public class Db
                 ON ea.node_ciid = n.ciid
             WHERE
                 n.group_id = @CustomerId
-                AND n.is_active = 1
+                -- AND n.is_active = 1
                 AND (
                     n.last_seen > @LastSeen
                     OR (

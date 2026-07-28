@@ -223,6 +223,10 @@ SELECT
     ce.endpoint_b_fqdn,
     ce.endpoint_a_ciid,
     ce.endpoint_b_ciid,
+    ce.endpoint_a_port,
+    ce.endpoint_a_ipv4,
+    ce.endpoint_b_port,
+    ce.endpoint_b_ipv4,
     ce.protocol,
     ce.service_port,
     ce.service_name,
@@ -247,6 +251,18 @@ SELECT
              AND LOWER(mnb.fqdn) <> LOWER(ce.endpoint_b_fqdn)
             THEN 1 ELSE 0
         END AS bit
+    ),
+    same_ciid_different_endpoint = CAST(
+        CASE
+            WHEN ce.endpoint_a_ciid IS NOT NULL
+             AND ce.endpoint_b_ciid IS NOT NULL
+             AND ce.endpoint_a_ciid = ce.endpoint_b_ciid
+             AND (
+                    ISNULL(LOWER(ce.endpoint_a_fqdn), '') <> ISNULL(LOWER(ce.endpoint_b_fqdn), '')
+                 OR ISNULL(ce.endpoint_a_ipv4, '') <> ISNULL(ce.endpoint_b_ipv4, '')
+             )
+            THEN 1 ELSE 0
+        END AS bit
     )
 FROM dbo.connection_edge ce
 LEFT JOIN dbo.managed_node mna
@@ -263,6 +279,29 @@ SELECT
     edges_missing_endpoint_b_process = SUM(CASE WHEN i.missing_endpoint_b_process = 1 THEN 1 ELSE 0 END),
     edges_with_any_missing_process = SUM(CASE WHEN i.missing_endpoint_a_process = 1 OR i.missing_endpoint_b_process = 1 THEN 1 ELSE 0 END),
     edges_unknown_service_name = SUM(CASE WHEN i.unknown_service_name = 1 THEN 1 ELSE 0 END),
-    edges_with_server_fqdn_mismatch = SUM(CASE WHEN i.endpoint_a_server_fqdn_mismatch = 1 OR i.endpoint_b_server_fqdn_mismatch = 1 THEN 1 ELSE 0 END)
+    edges_with_server_fqdn_mismatch = SUM(CASE WHEN i.endpoint_a_server_fqdn_mismatch = 1 OR i.endpoint_b_server_fqdn_mismatch = 1 THEN 1 ELSE 0 END),
+    edges_same_ciid_different_endpoint = SUM(CASE WHEN i.same_ciid_different_endpoint = 1 THEN 1 ELSE 0 END)
 FROM dbo.v_debug_connection_edge_issues i;
+GO
+
+CREATE OR ALTER VIEW dbo.v_debug_connection_edge_same_ciid_conflicts
+AS
+SELECT
+    i.id,
+    i.endpoint_a_fqdn,
+    i.endpoint_a_ipv4,
+    i.endpoint_a_port,
+    i.endpoint_a_ciid,
+    i.endpoint_b_fqdn,
+    i.endpoint_b_ipv4,
+    i.endpoint_b_port,
+    i.endpoint_b_ciid,
+    i.protocol,
+    i.service_port,
+    i.service_name,
+    i.seen_count,
+    i.first_seen,
+    i.last_seen
+FROM dbo.v_debug_connection_edge_issues i
+WHERE i.same_ciid_different_endpoint = 1;
 GO
