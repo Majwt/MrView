@@ -41,6 +41,7 @@ export default function GraphViewD3({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const requestRenderRef = useRef<() => void>(() => { });
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
+  const dimensionsRef = useRef({ width: 1, height: 1 });
   const nodesRef = useRef<GraphNode[]>([]);
   const edgesRef = useRef<GraphEdge[]>([]);
   const edgePairCountsRef = useRef<Map<string, number>>(new Map());
@@ -238,6 +239,7 @@ export default function GraphViewD3({
       const parentBounds = resizeTarget.getBoundingClientRect();
       width = Math.max(parentBounds.width || resizeTarget.clientWidth || 640, 1);
       height = Math.max(parentBounds.height || resizeTarget.clientHeight || 400, 1);
+      dimensionsRef.current = { width, height };
 
       refreshStyles();
 
@@ -328,11 +330,13 @@ export default function GraphViewD3({
     }
 
     const existingNodes = new Map(nodesRef.current.map((node) => [node.fqdn, node]));
+    const cx = dimensionsRef.current.width / 2;
+    const cy = dimensionsRef.current.height / 2;
     const nextNodes = graphData.nodes.map((nextNode) => {
       const existingNode = existingNodes.get(nextNode.fqdn);
 
       if (!existingNode) {
-        return { ...nextNode };
+        return { ...nextNode, x: cx, y: cy };
       }
 
       const { x, y, vx, vy, fx, fy } = existingNode;

@@ -8,7 +8,7 @@ CREATE TABLE dbo.node_interface_raw (
     id bigint IDENTITY(1,1) NOT NULL,
 
     ciid nvarchar(128) NOT NULL,
-    mac_address nvarchar(17) NOT NULL,
+    mac_address nvarchar(64) NOT NULL,
     fqdn nvarchar(255) NOT NULL,
     adapter nvarchar(255) NULL,
     address_ipv4 nvarchar(45) NULL,

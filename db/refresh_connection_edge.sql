@@ -289,220 +289,81 @@ BEGIN
                 k.id
             FROM keyed k
         ),
-        ranked AS (
-            SELECT
-                k.*,
-                rn_latest = ROW_NUMBER() OVER (
-                    PARTITION BY
-                        k.source_fqdn,
-                        k.source_ipv4,
-                        k.target_fqdn,
-                        k.target_ipv4,
-                        k.protocol,
-                        ISNULL(k.service_port, -1),
-                        CAST(k.DateAdded AS date)
-                    ORDER BY
-                        k.DateAdded DESC,
-                        k.id DESC
-                ),
-                rn_a = ROW_NUMBER() OVER (
-                    PARTITION BY
-                        k.source_fqdn,
-                        k.source_ipv4,
-                        k.target_fqdn,
-                        k.target_ipv4,
-                        k.protocol,
-                        ISNULL(k.service_port, -1),
-                        CAST(k.DateAdded AS date)
-                    ORDER BY
-                        CASE WHEN k.endpoint_a_process_name IS NOT NULL THEN 0 ELSE 1 END,
-                        k.DateAdded DESC,
-                        k.id DESC
-                ),
-                rn_b = ROW_NUMBER() OVER (
-                    PARTITION BY
-                        k.source_fqdn,
-                        k.source_ipv4,
-                        k.target_fqdn,
-                        k.target_ipv4,
-                        k.protocol,
-                        ISNULL(k.service_port, -1),
-                        CAST(k.DateAdded AS date)
-                    ORDER BY
-                        CASE WHEN k.endpoint_b_process_name IS NOT NULL THEN 0 ELSE 1 END,
-                        k.DateAdded DESC,
-                        k.id DESC
-                )
-            FROM reoriented k
-        ),
-        aggregated AS (
-            SELECT
-                endpoint_a_fqdn = source_fqdn,
-                endpoint_a_ipv4 = source_ipv4,
-                endpoint_a_port = MAX(CASE WHEN rn_latest = 1 THEN source_port END),
-                endpoint_a_ciid = MAX(source_ciid),
-
-                endpoint_b_fqdn = target_fqdn,
-                endpoint_b_ipv4 = target_ipv4,
-                endpoint_b_port = MAX(CASE WHEN rn_latest = 1 THEN target_port END),
-                endpoint_b_ciid = MAX(target_ciid),
-
-                protocol,
-                service_port,
-
-                observation_date = CAST(MIN(DateAdded) AS date),
-                seen_count = COUNT_BIG(*),
-                first_seen = MIN(DateAdded),
-                last_seen = MAX(DateAdded),
-
-                endpoint_a_process_name = MAX(CASE WHEN rn_a = 1 THEN endpoint_a_process_name END),
-                endpoint_a_process_id = MAX(CASE WHEN rn_a = 1 THEN endpoint_a_process_id END),
-                endpoint_b_process_name = MAX(CASE WHEN rn_b = 1 THEN endpoint_b_process_name END),
-                endpoint_b_process_id = MAX(CASE WHEN rn_b = 1 THEN endpoint_b_process_id END),
-
-                endpoint_a_process_samples = SUM(CASE WHEN endpoint_a_process_name IS NOT NULL THEN 1 ELSE 0 END),
-                endpoint_b_process_samples = SUM(CASE WHEN endpoint_b_process_name IS NOT NULL THEN 1 ELSE 0 END)
-            FROM ranked
-            GROUP BY
-                source_fqdn,
-                source_ipv4,
-                target_fqdn,
-                target_ipv4,
-                protocol,
-                service_port,
-                CAST(DateAdded AS date)
-        ),
         source_rows AS (
             SELECT
-                a.endpoint_a_fqdn,
-                a.endpoint_a_ipv4,
-                a.endpoint_a_port,
-                a.endpoint_a_ciid,
-                endpoint_a_process_name = COALESCE(a.endpoint_a_process_name, rev.endpoint_b_process_name),
-                endpoint_a_process_id = COALESCE(a.endpoint_a_process_id, rev.endpoint_b_process_id),
-
-                a.endpoint_b_fqdn,
-                a.endpoint_b_ipv4,
-                a.endpoint_b_port,
-                a.endpoint_b_ciid,
-                endpoint_b_process_name = COALESCE(a.endpoint_b_process_name, rev.endpoint_a_process_name),
-                endpoint_b_process_id = COALESCE(a.endpoint_b_process_id, rev.endpoint_a_process_id),
-
-                a.protocol,
-                a.service_port,
-                service_name = COALESCE(port_lookup.service_name, 'Unknown'),
-                a.observation_date,
-                a.seen_count,
-                a.first_seen,
-                a.last_seen,
-
-                confidence =
-                    CASE
-                                                WHEN (a.endpoint_a_process_samples > 0 OR ISNULL(rev.endpoint_b_process_samples, 0) > 0)
-                                                 AND (a.endpoint_b_process_samples > 0 OR ISNULL(rev.endpoint_a_process_samples, 0) > 0)
-                        THEN 95
-                                                WHEN (a.endpoint_a_process_samples > 0 OR ISNULL(rev.endpoint_b_process_samples, 0) > 0)
-                                                    OR (a.endpoint_b_process_samples > 0 OR ISNULL(rev.endpoint_a_process_samples, 0) > 0)
-                        THEN 40
-                        ELSE 10
-                    END
-            FROM aggregated a
-            LEFT JOIN aggregated rev
-                ON rev.endpoint_a_fqdn = a.endpoint_b_fqdn
-               AND rev.endpoint_a_ipv4 = a.endpoint_b_ipv4
-               AND rev.endpoint_b_fqdn = a.endpoint_a_fqdn
-               AND rev.endpoint_b_ipv4 = a.endpoint_a_ipv4
-               AND rev.protocol = a.protocol
-               AND ISNULL(rev.service_port, -1) = ISNULL(a.service_port, -1)
+                r.source_fqdn,
+                r.source_ipv4,
+                r.source_port,
+                r.source_ciid,
+                r.endpoint_a_process_name,
+                r.endpoint_a_process_id,
+                r.target_fqdn,
+                r.target_ipv4,
+                r.target_port,
+                r.target_ciid,
+                r.endpoint_b_process_name,
+                r.endpoint_b_process_id,
+                r.protocol,
+                r.service_port,
+                service_name = COALESCE(ps.service_name, 'Unknown'),
+                confidence = CASE
+                    WHEN r.endpoint_a_process_name IS NOT NULL
+                     AND r.endpoint_b_process_name IS NOT NULL THEN 95
+                    WHEN r.endpoint_a_process_name IS NOT NULL
+                      OR r.endpoint_b_process_name IS NOT NULL THEN 40
+                    ELSE 10
+                END,
+                r.DateAdded
+            FROM reoriented r
             OUTER APPLY (
                 SELECT TOP (1)
                     p.service_name
                 FROM dbo.v_ports_effective p
-                WHERE p.port_number = a.service_port
-                  AND (p.protocol = a.protocol OR p.protocol = 'any')
+                WHERE p.port_number = r.service_port
+                  AND (p.protocol = r.protocol OR p.protocol = 'any')
                 ORDER BY
-                    CASE WHEN p.protocol = a.protocol THEN 0 ELSE 1 END,
+                    CASE WHEN p.protocol = r.protocol THEN 0 ELSE 1 END,
                     p.source_table DESC
-            ) port_lookup
+            ) ps
         )
-        MERGE dbo.connection_edge AS target
-        USING source_rows AS source
-        ON target.edge_key =
-            CONVERT(nvarchar(64), HASHBYTES(
-                'SHA2_256',
-                CONCAT(
-                    LOWER(ISNULL(source.endpoint_a_fqdn, '')), '|',
-                    ISNULL(source.endpoint_a_ipv4, ''), '|',
-                    LOWER(ISNULL(source.endpoint_b_fqdn, '')), '|',
-                    ISNULL(source.endpoint_b_ipv4, ''), '|',
-                    LOWER(ISNULL(source.protocol, '')), '|',
-                    ISNULL(CONVERT(nvarchar(20), source.service_port), '')
-                )
-            ), 2)
-           AND target.observed_date = source.observation_date
-
-        WHEN MATCHED THEN
-            UPDATE SET
-                endpoint_a_fqdn = source.endpoint_a_fqdn,
-                endpoint_a_ipv4 = source.endpoint_a_ipv4,
-                endpoint_a_port = source.endpoint_a_port,
-                endpoint_a_ciid = source.endpoint_a_ciid,
-                endpoint_a_process_name = COALESCE(source.endpoint_a_process_name, target.endpoint_a_process_name),
-                endpoint_a_process_id = COALESCE(source.endpoint_a_process_id, target.endpoint_a_process_id),
-                endpoint_b_fqdn = source.endpoint_b_fqdn,
-                endpoint_b_ipv4 = source.endpoint_b_ipv4,
-                endpoint_b_port = source.endpoint_b_port,
-                endpoint_b_ciid = source.endpoint_b_ciid,
-                endpoint_b_process_name = COALESCE(source.endpoint_b_process_name, target.endpoint_b_process_name),
-                endpoint_b_process_id = COALESCE(source.endpoint_b_process_id, target.endpoint_b_process_id),
-                protocol = source.protocol,
-                service_port = source.service_port,
-                service_name = source.service_name,
-                raw_seen_count = target.raw_seen_count + source.seen_count,
-                observed_at = source.last_seen,
-                confidence = source.confidence
-
-        WHEN NOT MATCHED THEN
-            INSERT (
-                endpoint_a_fqdn,
-                endpoint_a_ipv4,
-                endpoint_a_port,
-                endpoint_a_ciid,
-                endpoint_a_process_name,
-                endpoint_a_process_id,
-                endpoint_b_fqdn,
-                endpoint_b_ipv4,
-                endpoint_b_port,
-                endpoint_b_ciid,
-                endpoint_b_process_name,
-                endpoint_b_process_id,
-                protocol,
-                service_port,
-                service_name,
-                raw_seen_count,
-                observed_at,
-                confidence
-            )
-            VALUES (
-                source.endpoint_a_fqdn,
-                source.endpoint_a_ipv4,
-                source.endpoint_a_port,
-                source.endpoint_a_ciid,
-                source.endpoint_a_process_name,
-                source.endpoint_a_process_id,
-                source.endpoint_b_fqdn,
-                source.endpoint_b_ipv4,
-                source.endpoint_b_port,
-                source.endpoint_b_ciid,
-                source.endpoint_b_process_name,
-                source.endpoint_b_process_id,
-                source.protocol,
-                source.service_port,
-                source.service_name,
-                source.seen_count,
-                source.last_seen,
-                source.confidence
-            );
+        INSERT INTO dbo.connection_edge (
+            endpoint_a_fqdn,
+            endpoint_a_ipv4,
+            endpoint_a_port,
+            endpoint_a_ciid,
+            endpoint_a_process_name,
+            endpoint_a_process_id,
+            endpoint_b_fqdn,
+            endpoint_b_ipv4,
+            endpoint_b_port,
+            endpoint_b_ciid,
+            endpoint_b_process_name,
+            endpoint_b_process_id,
+            protocol,
+            service_port,
+            service_name,
+            confidence,
+            observed_at
+        )
+        SELECT
+            source_fqdn,
+            source_ipv4,
+            source_port,
+            source_ciid,
+            endpoint_a_process_name,
+            endpoint_a_process_id,
+            target_fqdn,
+            target_ipv4,
+            target_port,
+            target_ciid,
+            endpoint_b_process_name,
+            endpoint_b_process_id,
+            protocol,
+            service_port,
+            service_name,
+            confidence,
+            DateAdded
+        FROM source_rows;
 
         COMMIT TRANSACTION;
     END TRY

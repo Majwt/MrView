@@ -10,23 +10,17 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
-  type ColumnFiltersState,
+  type FilterFn,
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table"
 import { z } from "zod"
 
-import { useIsMobile } from "@/hooks/use-mobile"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Drawer,
-  DrawerClose,
   DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer"
 import {
@@ -46,6 +40,8 @@ import {
 } from "@/components/ui/table"
 import { Columns3Icon, ChevronDownIcon } from "lucide-react"
 import type { NodeRow } from "@/api/dashboard-api"
+import NodeDetailsPanel from "@/components/NodeDetailsPanel"
+import type { GraphNode } from "@/features/graph/types"
 
 export const schema = z.object({
   ciid: z.string(),
@@ -58,12 +54,20 @@ export const schema = z.object({
   group_name: z.string(),
 })
 
+const nodeRowFilter: FilterFn<NodeRow> = (row, _colId, filterValue) => {
+  const q = String(filterValue ?? "").toLowerCase()
+  if (!q) return true
+  const { fqdn, hostname, group_name } = row.original
+  return [fqdn, hostname, group_name].some((v) => (v ?? "").toLowerCase().includes(q))
+}
+
 const columns: ColumnDef<NodeRow>[] = [
   {
     accessorKey: "fqdn",
     header: "FQDN",
     cell: ({ row }) => <TableCellViewer item={row.original} />,
     enableHiding: false,
+    filterFn: nodeRowFilter,
   },
   {
     accessorKey: "hostname",
@@ -124,8 +128,13 @@ const columns: ColumnDef<NodeRow>[] = [
 
 export function DataTable({ data }: { data: NodeRow[] }) {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
+  const [globalFilter, setGlobalFilter] = React.useState("")
   const [sorting, setSorting] = React.useState<SortingState>([{ id: "connection_count", desc: true }])
+
+  const columnFilters = React.useMemo(
+    () => [{ id: "fqdn", value: globalFilter }],
+    [globalFilter],
+  )
 
   const table = useReactTable({
     data,
@@ -133,7 +142,6 @@ export function DataTable({ data }: { data: NodeRow[] }) {
     state: { sorting, columnVisibility, columnFilters },
     getRowId: (row) => row.ciid,
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -146,9 +154,9 @@ export function DataTable({ data }: { data: NodeRow[] }) {
     <div className="w-full flex-col justify-start gap-6">
       <div className="flex items-center justify-between px-4 pb-4 lg:px-6">
         <Input
-          placeholder="Filter by FQDN…"
-          value={(table.getColumn("fqdn")?.getFilterValue() as string) ?? ""}
-          onChange={(e) => table.getColumn("fqdn")?.setFilterValue(e.target.value)}
+          placeholder="Search nodes…"
+          value={globalFilter}
+          onChange={(e) => setGlobalFilter(e.target.value)}
           className="h-8 w-48 lg:w-64"
         />
         <DropdownMenu>
@@ -222,42 +230,30 @@ export function DataTable({ data }: { data: NodeRow[] }) {
 }
 
 function TableCellViewer({ item }: { item: NodeRow }) {
-  const isMobile = useIsMobile()
+  const [open, setOpen] = React.useState(false)
+
+  const nodeData: GraphNode = {
+    id: item.ciid,
+    fqdn: item.fqdn,
+    hostname: item.hostname,
+    ciid: item.ciid,
+    distinct_edge: item.distinct_edges,
+    connection_count: item.connection_count,
+    first_seen: item.first_seen,
+    last_seen: item.last_seen,
+    is_placeholder: false,
+    x: 0, y: 0, fx: null, fy: null,
+  }
+
   return (
-    <Drawer direction={isMobile ? "bottom" : "right"}>
+    <Drawer open={open} onOpenChange={setOpen} direction="right">
       <DrawerTrigger asChild>
         <Button variant="link" className="h-auto p-0 font-mono text-sm">
           {item.fqdn}
         </Button>
       </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Node Detail</DrawerTitle>
-          <DrawerDescription className="font-mono text-xs break-all">{item.ciid}</DrawerDescription>
-        </DrawerHeader>
-        <div className="flex flex-col gap-3 px-4 py-2 text-sm">
-          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
-            <span className="text-muted-foreground">FQDN</span>
-            <span className="font-mono">{item.fqdn}</span>
-            <span className="text-muted-foreground">Hostname</span>
-            <span className="font-mono">{item.hostname}</span>
-            <span className="text-muted-foreground">Customer</span>
-            <span>{item.group_name || "—"}</span>
-            <span className="text-muted-foreground">Distinct edges</span>
-            <span className="tabular-nums">{item.distinct_edges.toLocaleString()}</span>
-            <span className="text-muted-foreground">Connections</span>
-            <span className="tabular-nums">{item.connection_count.toLocaleString()}</span>
-            <span className="text-muted-foreground">First seen</span>
-            <span>{new Date(item.first_seen).toLocaleString()}</span>
-            <span className="text-muted-foreground">Last seen</span>
-            <span>{new Date(item.last_seen).toLocaleString()}</span>
-          </div>
-        </div>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
+      <DrawerContent className="sm:max-w-[27.5rem] flex flex-col min-h-0">
+        <NodeDetailsPanel node={nodeData} onBack={() => setOpen(false)} />
       </DrawerContent>
     </Drawer>
   )

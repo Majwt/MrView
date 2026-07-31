@@ -12,17 +12,19 @@ export default function NodeDetailsPanel({
   isLoadingDetails?: boolean;
   onBack: () => void;
 }) {
-  const hasDetails = node.customer !== undefined;
+  const hasCustomer = node.customer !== undefined;
+  const hasDates = !!node.last_seen;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 gap-4">
 
+      <p className="text-xs text-muted-foreground">clicking on the graph while this is open is currently broken. To be fixed</p>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate font-mono text-sm font-semibold">{node.fqdn}</p>
           <p className="text-xs text-muted-foreground">
-            {hasDetails ? (node.customer!.name || "Unknown customer") : node.hostname}
+            {hasCustomer ? (node.customer!.name || "Unknown customer") : node.hostname}
           </p>
         </div>
         <button
@@ -36,9 +38,9 @@ export default function NodeDetailsPanel({
       </div>
 
       {/* CmdbCiId — highlighted */}
-      {isLoadingDetails && !hasDetails ? (
+      {isLoadingDetails && !hasCustomer ? (
         <div className="h-10 animate-pulse rounded-md bg-muted" />
-      ) : hasDetails ? (
+      ) : hasCustomer ? (
         node.customer!.cmdb_ci_id ? (
           <div className="rounded-md border-2 bg-muted/30 px-3 py-2">
             <div className="mb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">CMDB CI ID</div>
@@ -60,9 +62,9 @@ export default function NodeDetailsPanel({
           <Stat label="Distinct Connections" value={node.distinct_edge} />
           <Stat label="Total Connections" value={node.connection_count} />
         </div>
-        {isLoadingDetails && !hasDetails ? (
+        {isLoadingDetails && !hasDates ? (
           <div className="mt-2 h-10 animate-pulse rounded-md bg-muted" />
-        ) : hasDetails ? (
+        ) : hasDates ? (
           <div className="mt-2 grid grid-cols-2 gap-2">
             <LabelValue label="Last Seen">
               <RichDateCell value={node.last_seen!} />
@@ -75,7 +77,7 @@ export default function NodeDetailsPanel({
       </div>
 
       {/* Interfaces */}
-      {isLoadingDetails && !hasDetails ? (
+      {isLoadingDetails && !hasCustomer ? (
         <div className="space-y-2">
           <div className="h-3 w-20 animate-pulse rounded bg-muted" />
           <div className="h-16 animate-pulse rounded-md bg-muted" />

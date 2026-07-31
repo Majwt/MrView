@@ -13,6 +13,7 @@ import FilterBar from "./FilterBar";
 import GraphQuickFilters, { type QuickFilters } from "./GraphQuickFilters";
 import GraphViewD3 from "./GraphViewD3";
 import NodeDetailsPanel from "./NodeDetailsPanel";
+import { Drawer, DrawerContent } from "./ui/drawer";
 import { type TableConnection, connectionColumns } from "./table/connection-columns";
 import { DataTable } from "./table/data-table";
 
@@ -54,6 +55,7 @@ export default function GraphPage() {
   const [quickFilters, setQuickFilters] = useState<QuickFilters>({
     hideIsolatedNodes: true,
     staleThresholdHours: null,
+    managedOnly: false,
   });
 
   const [isLoadingNodeDetails, setIsLoadingNodeDetails] = useState(false);
@@ -69,7 +71,6 @@ export default function GraphPage() {
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialUrlState.filters);
   const filterSuggestions = useMemo(() => buildFilterSuggestions(snapshot), [snapshot]);
 
-  const graphSectionRef = useRef<HTMLElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const connectionFilteredSnapshot = useMemo(() => {
@@ -164,6 +165,7 @@ export default function GraphPage() {
         const graphQueryParams: GraphQueryParams = {
           excludeIsolated: qf.hideIsolatedNodes,
           minLastSeenHours: qf.staleThresholdHours,
+          managedOnly: qf.managedOnly,
         };
 
         const data = await fetchGraphSnapshot(customerId ? Number(customerId) : null, graphQueryParams);
@@ -198,19 +200,21 @@ export default function GraphPage() {
         const data = await fetchGraphSnapshot(customerId ? Number(customerId) : null, {
           excludeIsolated: quickFilters.hideIsolatedNodes,
           minLastSeenHours: quickFilters.staleThresholdHours,
+          managedOnly: quickFilters.managedOnly,
         });
 
         setSnapshot((current) => {
           if (!current) return current;
 
           const newFqdns = new Set(data.upsert_nodes.map((n: { fqdn: string }) => n.fqdn));
+          const newEdgeIds = new Set(data.upsert_edges.map((e: { id: string }) => e.id));
           const removedFqdns = new Set(
             current.nodes
               .filter((n) => !n.is_placeholder && !newFqdns.has(n.fqdn))
               .map((n) => n.fqdn),
           );
           const removeEdgeIds = current.edges
-            .filter((e) => removedFqdns.has(e.source_fqdn) || removedFqdns.has(e.target_fqdn))
+            .filter((e) => removedFqdns.has(e.source_fqdn) || removedFqdns.has(e.target_fqdn) || !newEdgeIds.has(e.id))
             .map((e) => e.id);
 
           return applyGraphDelta(current, {
@@ -229,13 +233,7 @@ export default function GraphPage() {
     applyFilterChange();
   }, [quickFilters]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    function handleChange() {
-      setIsFullscreen(!!document.fullscreenElement);
-    }
-    document.addEventListener("fullscreenchange", handleChange);
-    return () => document.removeEventListener("fullscreenchange", handleChange);
-  }, []);
+
 
   useEffect(() => {
     writeUrlState({
@@ -269,6 +267,7 @@ export default function GraphPage() {
     const graphQueryParams: GraphQueryParams = {
       excludeIsolated: quickFilters.hideIsolatedNodes,
       minLastSeenHours: quickFilters.staleThresholdHours,
+      managedOnly: quickFilters.managedOnly,
     };
 
     const intervalId = window.setInterval(async () => {
@@ -389,7 +388,7 @@ export default function GraphPage() {
   }
 
   return (
-    <div className="grid flex-1 grid-rows-2 overflow-hidden">
+    <div className={`grid flex-1 overflow-hidden ${isFullscreen ? "grid-rows-1" : "grid-rows-2"}`}>
       {error || isLoading ? (
         <>
           {error && errorDiv()}
@@ -398,12 +397,15 @@ export default function GraphPage() {
       ) : (
         <>
 
-          <section ref={graphSectionRef} className="relative flex min-h-0 border-b">
+          <section className="relative flex min-h-0 border-b">
             <div className="relative flex-1 min-h-0">
               <GraphQuickFilters
                 quickFilters={quickFilters}
                 onToggleIsolated={() =>
                   setQuickFilters((prev) => ({ ...prev, hideIsolatedNodes: !prev.hideIsolatedNodes }))
+                }
+                onToggleManagedOnly={() =>
+                  setQuickFilters((prev) => ({ ...prev, managedOnly: !prev.managedOnly }))
                 }
                 onSetStaleThreshold={(days) =>
                   setQuickFilters((prev) => ({ ...prev, staleThresholdHours: days }))
@@ -413,13 +415,7 @@ export default function GraphPage() {
                 type="button"
                 aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                 className="absolute top-2 right-2 z-20 rounded-md border bg-background/80 p-1.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                onClick={() => {
-                  if (!document.fullscreenElement) {
-                    graphSectionRef.current?.requestFullscreen();
-                  } else {
-                    document.exitFullscreen();
-                  }
-                }}
+                onClick={() => setIsFullscreen((v) => !v)}
               >
                 {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </button>
@@ -490,54 +486,63 @@ export default function GraphPage() {
                 </>) : null}
               </div>
             </div>
-            <aside className="w-110 shrink-0 border-l overflow-y-auto">
-              {selectedNode ? (
+          </section>
+
+          {/* Node details slide-in — no backdrop so the graph remains interactive */}
+          <Drawer
+            open={!!selectedNode}
+            onOpenChange={(open) => { if (!open) startTransition(() => setSelectedNodeFqdn(null)); }}
+            modal={false}
+            direction="right"
+          >
+            <DrawerContent showOverlay={false} className="sm:max-w-[27.5rem] flex flex-col min-h-0">
+              {selectedNode && (
                 <NodeDetailsPanel
                   node={selectedNode}
                   isLoadingDetails={isLoadingNodeDetails}
                   onBack={() => startTransition(() => setSelectedNodeFqdn(null))}
                 />
-              ) : (
-                <div className="p-4 text-sm text-muted-foreground">Select a node to view details.</div>
               )}
-            </aside>
-          </section>
+            </DrawerContent>
+          </Drawer>
 
-          <section className="flex min-h-0 flex-col overflow-hidden p-4">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <Input
-                className="h-8 w-56"
-                placeholder="Search connections..."
-                value={globalSearch}
-                onChange={(event) => setGlobalSearch(event.target.value)}
-              />
-              <FilterBar
-                dispatch={dispatchFilters}
-                filters={filters}
-                suggestions={filterSuggestions}
-              />
-              {selectedNodeFqdn ? (
-                <div className="inline-flex h-7 items-center gap-2 rounded-md border bg-muted px-2 text-xs">
-                  <span>Connected to {selectedNodeFqdn}</span>
-                  <button
-                    type="button"
-                    aria-label={`Clear selected node ${selectedNodeFqdn}`}
-                    className="rounded-sm p-0.5 hover:bg-background/70"
-                    onClick={() => startTransition(() => setSelectedNodeFqdn(null))}
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ) : null}
-            </div>
+          {!isFullscreen && <section className="flex min-h-0 flex-col overflow-hidden p-4">
             <DataTable
               columns={connectionColumns}
               data={tableConnections}
               getRowHoverId={(row) => row.id}
               hoveredRowIds={hoveredConnectionIds}
               onRowHoverChange={setHoveredConnectionId}
+              toolbar={
+                <>
+                  <Input
+                    className="h-8 w-56"
+                    placeholder="Search connections..."
+                    value={globalSearch}
+                    onChange={(event) => setGlobalSearch(event.target.value)}
+                  />
+                  <FilterBar
+                    dispatch={dispatchFilters}
+                    filters={filters}
+                    suggestions={filterSuggestions}
+                  />
+                  {selectedNodeFqdn ? (
+                    <div className="inline-flex h-7 items-center gap-2 rounded-md border bg-muted px-2 text-xs">
+                      <span>Connected to {selectedNodeFqdn}</span>
+                      <button
+                        type="button"
+                        aria-label={`Clear selected node ${selectedNodeFqdn}`}
+                        className="rounded-sm p-0.5 hover:bg-background/70"
+                        onClick={() => startTransition(() => setSelectedNodeFqdn(null))}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              }
             />
-          </section>
+          </section>}
 
         </>
       )}

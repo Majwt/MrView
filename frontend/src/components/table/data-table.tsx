@@ -1,3 +1,4 @@
+import type React from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -32,6 +33,7 @@ type DataTableProps<TData, TValue> = {
   data: TData[];
   globalFilter?: string;
   onGlobalFilterChange?: (value: string) => void;
+  toolbar?: React.ReactNode;
   getRowHoverId?: (row: TData) => string | null;
   hoveredRowId?: string | null;
   hoveredRowIds?: Set<string>;
@@ -43,6 +45,7 @@ export function DataTable<TData, TValue>({
   data,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
+  toolbar,
   getRowHoverId,
   hoveredRowId,
   hoveredRowIds,
@@ -76,9 +79,10 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {hidableColumns.length > 0 && (
-        <div className="flex justify-end pb-2">
-          <DropdownMenu>
+      {(hidableColumns.length > 0 || toolbar) && (
+        <div className="flex items-center justify-between gap-2 pb-2">
+          <div className="flex flex-wrap items-center gap-2">{toolbar}</div>
+          {hidableColumns.length > 0 && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-7 text-xs">
                 <Columns3Icon className="mr-1 size-3" />
@@ -98,7 +102,7 @@ export function DataTable<TData, TValue>({
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">

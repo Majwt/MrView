@@ -4,6 +4,7 @@ import type { GraphCursor, GraphDelta, GraphNode } from "@/features/graph/types"
 export type GraphQueryParams = {
   excludeIsolated?: boolean;
   minLastSeenHours?: number | null;
+  managedOnly?: boolean;
 };
 
 export type NodeFilterParams = {
@@ -19,6 +20,7 @@ export type NodeFilterParams = {
 function applyGraphQueryParams(params: URLSearchParams, queryParams?: GraphQueryParams) {
   if (queryParams?.excludeIsolated) params.set("excludeIsolated", "true");
   if (queryParams?.minLastSeenHours != null) params.set("minLastSeenHours", String(queryParams.minLastSeenHours));
+  if (queryParams?.managedOnly) params.set("managedOnly", "true");
 }
 
 export function fetchGraphSnapshot(customerId: number | null, queryParams?: GraphQueryParams): Promise<GraphDelta> {

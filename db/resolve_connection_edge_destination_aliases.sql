@@ -13,7 +13,7 @@ BEGIN
         SELECT
             destination_alias = LOWER(LTRIM(RTRIM(ce.endpoint_b_fqdn))),
             source_fqdn = LOWER(LTRIM(RTRIM(ce.endpoint_a_fqdn))),
-            evidence = ce.seen_count
+            evidence = 1
         FROM dbo.connection_edge ce
         WHERE NULLIF(LTRIM(RTRIM(ce.endpoint_b_fqdn)), '') IS NOT NULL
           AND ce.endpoint_b_fqdn NOT LIKE '%.%'
@@ -61,7 +61,7 @@ BEGIN
     source_pool AS (
         SELECT
             source_fqdn = LOWER(LTRIM(RTRIM(ce.endpoint_a_fqdn))),
-            evidence_count = SUM(ce.seen_count)
+            evidence_count = COUNT_BIG(*)
         FROM dbo.connection_edge ce
         WHERE NULLIF(LTRIM(RTRIM(ce.endpoint_a_fqdn)), '') IS NOT NULL
           AND ce.endpoint_a_fqdn LIKE '%.%'

@@ -6,7 +6,7 @@ GO
 
 CREATE TABLE dbo.node_interface (
     ciid nvarchar(128) NOT NULL,
-    mac_address char(17) NOT NULL,
+    mac_address nvarchar(64) NOT NULL,
     fqdn nvarchar(255) NOT NULL,
     adapter nvarchar(255) NULL,
     address_ipv4 nvarchar(45) NULL,

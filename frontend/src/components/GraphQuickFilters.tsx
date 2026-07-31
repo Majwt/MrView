@@ -1,24 +1,26 @@
-import { Clock, Unlink } from "lucide-react";
+import { Clock, Network, Unlink } from "lucide-react";
 
 export type QuickFilters = {
   hideIsolatedNodes: boolean;
   staleThresholdHours: number | null;
+  managedOnly: boolean;
 };
 
 const STALE_OPTIONS: { label: string; hours: number; title: string }[] = [
-  { label: "12h", hours: 12, title: "Hide nodes not seen in the last 12 hours" },
-  { label: "1d", hours: 1 * 24, title: "Hide nodes not seen in the last 1 days" },
-  { label: "3d", hours: 3 * 24, title: "Hide nodes not seen in the last 3 days" },
-  { label: "7d", hours: 7 * 24, title: "Hide nodes not seen in the last 7 days" },
-  { label: "1m", hours: 30 * 24, title: "Hide nodes not seen in the last month" },
-  { label: "3m", hours: 90 * 24, title: "Hide nodes not seen in the last 3 months" },
-  { label: "6m", hours: 180 * 24, title: "Hide nodes not seen in the last 6 months" },
-  { label: "1y", hours: 365 * 24, title: "Hide nodes not seen in the last year" },
+  { label: "12h", hours: 12, title: "only show connections/nodes active within the last 12 hours" },
+  { label: "1d", hours: 1 * 24, title: "only show connections/nodes active within the last 1 days" },
+  { label: "3d", hours: 3 * 24, title: "only show connections/nodes active within the last 3 days" },
+  { label: "7d", hours: 7 * 24, title: "only show connections/nodes active within the last 7 days" },
+  { label: "1m", hours: 30 * 24, title: "only show connections/nodes active within the last month" },
+  { label: "3m", hours: 90 * 24, title: "only show connections/nodes active within the last 3 months" },
+  { label: "6m", hours: 180 * 24, title: "only show connections/nodes active within the last 6 months" },
+  { label: "1y", hours: 365 * 24, title: "only show connections/nodes active within the last year" },
 ];
 
 type GraphQuickFiltersProps = {
   quickFilters: QuickFilters;
   onToggleIsolated: () => void;
+  onToggleManagedOnly: () => void;
   onSetStaleThreshold: (days: number | null) => void;
 };
 
@@ -28,6 +30,7 @@ const pillClass =
 export default function GraphQuickFilters({
   quickFilters,
   onToggleIsolated,
+  onToggleManagedOnly,
   onSetStaleThreshold,
 }: GraphQuickFiltersProps) {
   return (
@@ -41,6 +44,17 @@ export default function GraphQuickFilters({
       >
         <Unlink className="size-3.5" />
         Hide isolated
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleManagedOnly}
+        data-active={quickFilters.managedOnly}
+        className={pillClass}
+        title="Only show connections where both endpoints are managed nodes"
+      >
+        <Network className="size-3.5" />
+        Managed only
       </button>
 
       <div className="h-4 w-px bg-foreground/20" />

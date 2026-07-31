@@ -27,12 +27,12 @@ public class GraphService
 
         if (customerId == -1)
         {
-            dbEdgesTask = db.getEdgesAsync(cursor);
+            dbEdgesTask = db.getEdgesAsync(cursor, qp);
             dbNodesTask = db.getNodeSummariesAsync(cursor, qp);
         }
         else
         {
-            dbEdgesTask = db.getCustomerEdgesAsync(cursor, customerId);
+            dbEdgesTask = db.getCustomerEdgesAsync(cursor, customerId, qp);
             dbNodesTask = db.getCustomerNodeSummariesAsync(cursor, customerId, qp);
         }
 

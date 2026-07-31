@@ -63,16 +63,20 @@ public class Db
         }
     }
 
-    public async Task<IEnumerable<EdgeEntity>> getEdgesAsync(GraphCursor cursor)
+    public async Task<IEnumerable<EdgeEntity>> getEdgesAsync(GraphCursor cursor, GraphQueryParams queryParams)
     {
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
 
+        var activeFilter = queryParams.ManagedOnly
+            ? "e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
+            : "(na.is_active = 1 OR nb.is_active = 1)";
+        var staleEdgeFilter = queryParams.MinLastSeenHours.HasValue ? "AND e.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
         var sql = $"""
             SELECT
                 e.id,
-                e.endpoint_a_fqdn,
-                e.endpoint_b_fqdn,
+                endpoint_a_fqdn = COALESCE(na.fqdn, e.endpoint_a_fqdn),
+                endpoint_b_fqdn = COALESCE(nb.fqdn, e.endpoint_b_fqdn),
                 e.endpoint_a_ipv4,
                 e.endpoint_b_ipv4,
                 e.endpoint_a_port,
@@ -101,10 +105,8 @@ public class Db
                 ORDER BY CASE WHEN p.protocol = e.protocol THEN 0 ELSE 1 END
             ) ps
             WHERE e.seen_count > @SeenCountThreshold
-              AND (
-                  na.is_active = 1
-                  OR nb.is_active = 1
-              )
+              AND {activeFilter}
+              {staleEdgeFilter}
               AND (
                     e.last_seen > @LastSeen
                     OR (
@@ -122,21 +124,27 @@ public class Db
         });
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
         command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
+        if (queryParams.MinLastSeenHours.HasValue)
+            command.Parameters.AddWithValue("@MinLastSeenHours", queryParams.MinLastSeenHours.Value);
         await using var reader = await command.ExecuteReaderAsync();
 
         return await ParseEdgesFromReader(reader);
     }
 
-    public async Task<IEnumerable<EdgeEntity>> getCustomerEdgesAsync(GraphCursor cursor, int customerId)
+    public async Task<IEnumerable<EdgeEntity>> getCustomerEdgesAsync(GraphCursor cursor, int customerId, GraphQueryParams queryParams)
     {
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
 
+        var activeFilter = queryParams.ManagedOnly
+            ? "e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
+            : "(na.is_active = 1 OR nb.is_active = 1)";
+        var staleEdgeFilter = queryParams.MinLastSeenHours.HasValue ? "AND e.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
         var sql = $"""
             SELECT
                 e.id,
-                e.endpoint_a_fqdn,
-                e.endpoint_b_fqdn,
+                endpoint_a_fqdn = COALESCE(na.fqdn, e.endpoint_a_fqdn),
+                endpoint_b_fqdn = COALESCE(nb.fqdn, e.endpoint_b_fqdn),
                 e.endpoint_a_ipv4,
                 e.endpoint_b_ipv4,
                 e.endpoint_a_port,
@@ -169,10 +177,8 @@ public class Db
                     na.group_id = @CustomerId
                     OR nb.group_id = @CustomerId
               )
-              AND (
-                  na.is_active = 1
-                  OR nb.is_active = 1
-              )
+              AND {activeFilter}
+              {staleEdgeFilter}
               AND (
                     e.last_seen > @LastSeen
                     OR (
@@ -191,6 +197,8 @@ public class Db
         command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
         command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
         command.Parameters.AddWithValue("@CustomerId", customerId);
+        if (queryParams.MinLastSeenHours.HasValue)
+            command.Parameters.AddWithValue("@MinLastSeenHours", queryParams.MinLastSeenHours.Value);
         await using var reader = await command.ExecuteReaderAsync();
 
         return await ParseEdgesFromReader(reader);
@@ -294,6 +302,7 @@ public class Db
 
         var isolatedFilter = queryParams.ExcludeIsolated ? "AND COALESCE(ea.edge_count, 0) > 0" : "";
         var staleFilter = queryParams.MinLastSeenHours.HasValue ? "AND n.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
+        var managedEdgeFilter = queryParams.ManagedOnly ? "AND e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL" : "";
 
         var sql = $"""
             WITH edge_agg AS (
@@ -305,6 +314,7 @@ public class Db
                     SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
                     FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
+                      {managedEdgeFilter}
 
                     UNION ALL
 
@@ -312,6 +322,7 @@ public class Db
                     FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
                       AND e.endpoint_b_ciid <> e.endpoint_a_ciid
+                      {managedEdgeFilter}
                 ) x
                 WHERE node_ciid IS NOT NULL
                 GROUP BY node_ciid
@@ -358,6 +369,7 @@ public class Db
 
         var isolatedFilter = queryParams.ExcludeIsolated ? "AND COALESCE(ea.edge_count, 0) > 0" : "";
         var staleFilter = queryParams.MinLastSeenHours.HasValue ? "AND n.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
+        var managedEdgeFilter = queryParams.ManagedOnly ? "AND e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL" : "";
 
         var sql = $"""
             WITH customer_edge_ciids AS (
@@ -391,6 +403,7 @@ public class Db
                     SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
                     FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
+                      {managedEdgeFilter}
 
                     UNION ALL
 
@@ -398,6 +411,7 @@ public class Db
                     FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
                       AND e.endpoint_b_ciid <> e.endpoint_a_ciid
+                      {managedEdgeFilter}
                 ) x
                 WHERE node_ciid IS NOT NULL
                 GROUP BY node_ciid
@@ -949,7 +963,7 @@ public class Db
                 active_nodes = (
                     SELECT COUNT_BIG(*)
                     FROM {_nodesTable}
-                    WHERE is_active = 1 {customerNodeFilter}
+                    WHERE last_seen >= DATEADD(DAY, -7, GETUTCDATE()) {customerNodeFilter}
                 ),
                 total_seen_count = (
                     SELECT ISNULL(SUM(e.seen_count), 0)
@@ -995,8 +1009,8 @@ public class Db
         var sql = $"""
             SELECT
                 date = e.observed_date,
-                total_connections = SUM(e.raw_seen_count),
-                distinct_connections = COUNT(DISTINCT e.edge_key)
+                total_connections = COUNT_BIG(*),
+                distinct_connections = COUNT_BIG(DISTINCT e.edge_key)
             FROM {_edgesTable} e
             {customerJoin}
             WHERE e.observed_date >= CAST(DATEADD(DAY, -@Days, GETUTCDATE()) AS date)

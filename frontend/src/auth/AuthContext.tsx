@@ -10,6 +10,7 @@ export interface AuthContextValue {
   customerId: number | null;
   name: string | null;
   email: string | null;
+  picture: string | null;
   isLoading: boolean;
   login: (token?: string) => void;
   logout: () => void;
@@ -68,11 +69,16 @@ function resolveEmail(claims: Record<string, unknown>): string | null {
   return typeof raw === "string" ? raw : null;
 }
 
+function resolvePicture(claims: Record<string, unknown>): string | null {
+  const raw = claims["picture"];
+  return typeof raw === "string" ? raw : null;
+}
+
 function parseToken(token: string | null) {
-  if (!token) return { token: null, role: null, customerId: null, name: null, email: null };
+  if (!token) return { token: null, role: null, customerId: null, name: null, email: null, picture: null };
   const claims = decodeJwtPayload(token);
-  if (!claims) return { token: null, role: null, customerId: null, name: null, email: null };
-  return { token, role: resolveRole(claims), customerId: resolveCustomerId(claims), name: resolveName(claims), email: resolveEmail(claims) };
+  if (!claims) return { token: null, role: null, customerId: null, name: null, email: null, picture: null };
+  return { token, role: resolveRole(claims), customerId: resolveCustomerId(claims), name: resolveName(claims), email: resolveEmail(claims), picture: resolvePicture(claims) };
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -93,7 +99,7 @@ function LocalAuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     _tokenRef = null;
-    setState({ token: null, role: null, customerId: null, name: null, email: null });
+    setState({ token: null, role: null, customerId: null, name: null, email: null, picture: null });
   }, []);
 
   return (
@@ -146,12 +152,12 @@ function OidcAuthBridge({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     _tokenRef = null;
-    setLocalState({ token: null, role: null, customerId: null, name: null, email: null });
-    void oidc.signoutRedirect();
+    setLocalState({ token: null, role: null, customerId: null, name: null, email: null, picture: null });
+    void oidc.removeUser();
   }, [oidc]);
 
   return (
-    <AuthContext.Provider value={{ ...localState, isLoading: oidc.isLoading || exchanging, login, logout }}>
+    <AuthContext.Provider value={{ ...localState, picture: localState.picture ?? (oidc.user?.profile?.picture as string | null | undefined) ?? null, isLoading: oidc.isLoading || exchanging, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

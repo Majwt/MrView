@@ -37,14 +37,4 @@ BEGIN
 END;
 GO
 
-GRANT EXECUTE ON OBJECT::dbo.get_raw_dateadded_watermarks TO db_datawriter;
-GO
 
-GRANT SELECT ON OBJECT::dbo.connection_raw TO db_datawriter;
-GO
-
-GRANT SELECT ON OBJECT::dbo.node_raw TO db_datawriter;
-GO
-
-GRANT SELECT ON OBJECT::dbo.node_interface_raw TO db_datawriter;
-GO

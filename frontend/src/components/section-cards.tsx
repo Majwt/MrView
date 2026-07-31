@@ -33,7 +33,7 @@ export function SectionCards({ stats, loading }: { stats: DashboardStats | null;
             </Badge>
           </CardAction>
         </CardHeader>
-        <CardFooter className="flex-col items-start gap-1.5 text-sm">
+        <CardFooter className="flex-col items-start gap-1.5 text-sm h-full">
           <div className="line-clamp-1 flex gap-2 font-medium">
             Unique source–destination pairs
           </div>
@@ -53,11 +53,11 @@ export function SectionCards({ stats, loading }: { stats: DashboardStats | null;
             </Badge>
           </CardAction>
         </CardHeader>
-        <CardFooter className="flex-col items-start gap-1.5 text-sm">
+        <CardFooter className="flex-col items-start gap-1.5 text-sm h-full">
           <div className="line-clamp-1 flex gap-2 font-medium">
             Monitored endpoints
           </div>
-          <div className="text-muted-foreground">Managed nodes with is_active = true</div>
+          <div className="text-muted-foreground">Managed nodes active within the last 7 days</div>
         </CardFooter>
       </Card>
       <Card className="@container/card">
@@ -77,7 +77,7 @@ export function SectionCards({ stats, loading }: { stats: DashboardStats | null;
           <div className="line-clamp-1 flex gap-2 font-medium">
             Cumulative connection reports
           </div>
-          <div className="text-muted-foreground">Sum of seen_count across all edges</div>
+          <div className="text-muted-foreground">Sum of all seen events across all edges</div>
         </CardFooter>
       </Card>
       <Card className="@container/card">

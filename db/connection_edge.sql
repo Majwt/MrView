@@ -28,7 +28,6 @@ CREATE TABLE dbo.connection_edge (
     service_name nvarchar(100) NOT NULL CONSTRAINT DF_connection_edge_service_name DEFAULT ('Unknown'),
     confidence tinyint NOT NULL CONSTRAINT DF_connection_edge_confidence DEFAULT (0),
 
-    raw_seen_count bigint NOT NULL CONSTRAINT DF_connection_edge_raw_seen_count DEFAULT (1),
     observed_at datetime2(0) NOT NULL,
     observed_date AS CAST(observed_at AS date) PERSISTED,
 
@@ -55,8 +54,14 @@ CREATE TABLE dbo.connection_edge (
 );
 GO
 
-CREATE UNIQUE INDEX UX_connection_edge_edge_key_date
-ON dbo.connection_edge (edge_key, observed_date);
+-- Prevents double-inserting the same observation on proc retry.
+CREATE UNIQUE INDEX UX_connection_edge_edge_key_observed_at
+ON dbo.connection_edge (edge_key, observed_at)
+WITH (IGNORE_DUP_KEY = ON);
+GO
+
+CREATE INDEX IX_connection_edge_edge_key
+ON dbo.connection_edge (edge_key);
 GO
 
 CREATE INDEX IX_connection_edge_observed_date

@@ -230,9 +230,8 @@ SELECT
     ce.protocol,
     ce.service_port,
     ce.service_name,
-    ce.seen_count,
-    ce.first_seen,
-    ce.last_seen,
+    ce.observed_at,
+    ce.observed_date,
     missing_endpoint_a_process = CAST(CASE WHEN ce.endpoint_a_process_name IS NULL THEN 1 ELSE 0 END AS bit),
     missing_endpoint_b_process = CAST(CASE WHEN ce.endpoint_b_process_name IS NULL THEN 1 ELSE 0 END AS bit),
     unknown_service_name = CAST(CASE WHEN ce.service_name = 'Unknown' THEN 1 ELSE 0 END AS bit),
@@ -299,9 +298,8 @@ SELECT
     i.protocol,
     i.service_port,
     i.service_name,
-    i.seen_count,
-    i.first_seen,
-    i.last_seen
+    i.observed_at,
+    i.observed_date
 FROM dbo.v_debug_connection_edge_issues i
 WHERE i.same_ciid_different_endpoint = 1;
 GO

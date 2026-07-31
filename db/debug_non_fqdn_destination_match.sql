@@ -11,10 +11,10 @@ AS
 WITH non_fqdn_destinations AS (
     SELECT
         destination_name = LOWER(LTRIM(RTRIM(ce.endpoint_b_fqdn))),
-        destination_seen_count = SUM(ce.seen_count),
+        destination_seen_count = COUNT_BIG(*),
         destination_edge_count = COUNT_BIG(*),
-        first_seen = MIN(ce.first_seen),
-        last_seen = MAX(ce.last_seen)
+        first_seen = CAST(MIN(ce.observed_date) AS datetime2(0)),
+        last_seen  = CAST(MAX(ce.observed_date) AS datetime2(0))
     FROM dbo.connection_edge ce
     WHERE NULLIF(LTRIM(RTRIM(ce.endpoint_b_fqdn)), '') IS NOT NULL
       AND ce.endpoint_b_fqdn NOT LIKE '%.%'

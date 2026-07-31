@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
@@ -163,6 +163,9 @@ export function ChartAreaInteractive({ data, loading }: { data: ChartPoint[]; lo
                 })
               }}
             />
+            {/* Each series gets its own hidden Y-axis so they scale independently */}
+            <YAxis yAxisId="total" hide />
+            <YAxis yAxisId="distinct" orientation="right" hide />
             <ChartTooltip
               cursor={false}
               content={
@@ -178,18 +181,18 @@ export function ChartAreaInteractive({ data, loading }: { data: ChartPoint[]; lo
               }
             />
             <Area
+              yAxisId="distinct"
               dataKey="distinct"
               type="natural"
               fill="url(#fillDistinct)"
               stroke="var(--color-distinct)"
-              stackId="a"
             />
             <Area
+              yAxisId="total"
               dataKey="total"
               type="natural"
               fill="url(#fillTotal)"
               stroke="var(--color-total)"
-              stackId="a"
             />
           </AreaChart>
         </ChartContainer>

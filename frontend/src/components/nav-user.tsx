@@ -1,6 +1,7 @@
 import {
   Avatar,
   AvatarFallback,
+  AvatarImage,
 } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -29,7 +30,7 @@ function initials(name: string | null): string {
 }
 
 export function NavUser() {
-  const { name, email, logout } = useAuth()
+  const { name, email, picture, role, logout } = useAuth()
   const navigate = useNavigate()
   const { isMobile } = useSidebar()
 
@@ -47,10 +48,12 @@ export function NavUser() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="h-8 w-8 rounded-lg grayscale">
+              <Avatar className="h-8 w-8 rounded-lg">
+                {picture && <AvatarImage src={picture} alt={name ?? "User"} />}
                 <AvatarFallback className="rounded-lg">{initials(name)}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-start text-sm leading-tight">
+                {role && <span className="truncate text-xs text-muted-foreground">{role}</span>}
                 <span className="truncate font-medium">{name ?? "User"}</span>
                 <span className="truncate text-xs text-muted-foreground">
                   {email ?? ""}
@@ -68,9 +71,11 @@ export function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
+                  {picture && <AvatarImage src={picture} alt={name ?? "User"} />}
                   <AvatarFallback className="rounded-lg">{initials(name)}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-start text-sm leading-tight">
+                  {role && <span className="truncate text-xs text-muted-foreground">{role}</span>}
                   <span className="truncate font-medium">{name ?? "User"}</span>
                   <span className="truncate text-xs text-muted-foreground">
                     {email ?? ""}

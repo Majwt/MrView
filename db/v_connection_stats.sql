@@ -9,7 +9,7 @@ AS
         SELECT
             edge_key,
             id         = MAX(id),
-            seen_count = SUM(raw_seen_count),
+            seen_count = COUNT_BIG(*),
             first_seen = CAST(MIN(observed_date) AS datetime2(0)),
             last_seen  = CAST(MAX(observed_date) AS datetime2(0))
         FROM dbo.connection_edge
