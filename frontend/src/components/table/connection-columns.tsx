@@ -38,7 +38,7 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
   },
   {
     accessorKey: "source",
-    header: "Local",
+    header: "Source",
     cell: ({ row }) => <HostCell primary={row.original.source} secondary={row.original.sourceIp} />,
   },
   // {
@@ -53,12 +53,21 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
   },
   {
     accessorKey: "sourceProcess",
-    header: "Local proc",
+    header: "Source proc",
     cell: ({ getValue }) => <ProcessCell value={String(getValue() ?? "")} />,
   },
   {
+    id: "direction",
+    header: "",
+    cell: () => (
+      <div className="flex flex-col items-center gap-0.5">
+        <span className="text-[40px] text-muted-foreground">→</span>
+      </div>
+    ),
+  },
+  {
     accessorKey: "target",
-    header: "Peer",
+    header: "Destination",
     cell: ({ row }) => <HostCell primary={row.original.target} secondary={row.original.targetIp} />,
   },
   // {
@@ -73,7 +82,7 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
   },
   {
     accessorKey: "targetProcess",
-    header: "Peer proc",
+    header: "Destination proc",
     cell: ({ getValue }) => <ProcessCell value={String(getValue() ?? "")} />,
   },
   {

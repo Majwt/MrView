@@ -18,6 +18,7 @@ import { DataTable } from "./table/data-table";
 
 import { Input } from "./ui/input";
 import { useParams } from "react-router";
+import { useGraphStats } from "@/features/graph/GraphStatsContext";
 
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
@@ -26,6 +27,7 @@ const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
 export default function GraphPage() {
 
   const { customerId } = useParams();
+  const { setLastConnectionUtc } = useGraphStats();
 
 
   const [initialUrlState] = useState(readUrlState);
@@ -111,8 +113,7 @@ export default function GraphPage() {
     [snapshot],
   );
   const selectedNode = selectedNodeFqdn ? nodesByFqdn.get(selectedNodeFqdn) : undefined;
-  const contextNodeFqdn = hoveredNodeFqdn ?? selectedNodeFqdn;
-  const contextNode = contextNodeFqdn ? nodesByFqdn.get(contextNodeFqdn) : undefined;
+  const contextNode = hoveredNodeFqdn ? nodesByFqdn.get(hoveredNodeFqdn) : undefined;
 
   const tableConnections: TableConnection[] = useMemo(() => {
     if (connectionSearchedSnapshot == null) return [];
@@ -173,6 +174,7 @@ export default function GraphPage() {
         console.log("Normalized graph snapshot");
 
         setSnapshot(snap);
+        if (snap.cursor?.last_seen) setLastConnectionUtc(snap.cursor.last_seen);
       } catch (error) {
         setError(error instanceof Error ? error.message : "Failed to load graph");
       } finally {

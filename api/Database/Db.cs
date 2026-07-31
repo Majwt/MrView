@@ -330,7 +330,6 @@ public class Db
                     n.last_seen = @LastSeen
                     AND CAST(ABS(CHECKSUM(n.ciid)) AS bigint) > @LastId
                 ))
-                AND n.is_active = 1
                 {isolatedFilter}
                 {staleFilter}
             ORDER BY n.last_seen, node_id;
@@ -359,7 +358,29 @@ public class Db
         var staleFilter = queryParams.MinLastSeenHours.HasValue ? "AND n.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
 
         var sql = $"""
-            WITH edge_agg AS (
+            WITH customer_edge_ciids AS (
+                -- All node ciids that appear as an endpoint in any edge involving this customer
+                SELECT e.endpoint_a_ciid AS ciid
+                FROM {_edgesTable} e
+                LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
+                LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
+                WHERE e.seen_count > @SeenCountThreshold
+                  AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)
+                  AND (na.is_active = 1 OR nb.is_active = 1)
+                  AND e.endpoint_a_ciid IS NOT NULL
+
+                UNION
+
+                SELECT e.endpoint_b_ciid
+                FROM {_edgesTable} e
+                LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
+                LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
+                WHERE e.seen_count > @SeenCountThreshold
+                  AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)
+                  AND (na.is_active = 1 OR nb.is_active = 1)
+                  AND e.endpoint_b_ciid IS NOT NULL
+            ),
+            edge_agg AS (
                 SELECT
                     node_ciid,
                     edge_count = COUNT_BIG(*),
@@ -387,12 +408,10 @@ public class Db
                 edge_count = COALESCE(ea.edge_count, 0),
                 connection_count = COALESCE(ea.connection_count, 0)
             FROM {_nodesTable} n
-            LEFT JOIN edge_agg ea
-                ON ea.node_ciid = n.ciid
+            JOIN customer_edge_ciids cec ON cec.ciid = n.ciid
+            LEFT JOIN edge_agg ea ON ea.node_ciid = n.ciid
             WHERE
-                n.group_id = @CustomerId
-                AND n.is_active = 1
-                AND (
+                (
                     n.last_seen > @LastSeen
                     OR (
                         n.last_seen = @LastSeen
@@ -494,8 +513,7 @@ public class Db
                 ON i.ciid = n.ciid
             LEFT JOIN edge_agg ea
                 ON ea.node_ciid = n.ciid
-            WHERE n.ciid = @Ciid
-              AND n.is_active = 1;
+            WHERE n.ciid = @Ciid;
             """;
 
         await using var command = new SqlCommand(sql, connection);
@@ -508,12 +526,16 @@ public class Db
     public async Task<IEnumerable<string>> filterNodeCiidsAsync(
         string? customer, string? ip, string? mac,
         DateTime? firstSeenAfter, DateTime? firstSeenBefore,
-        DateTime? lastSeenAfter, DateTime? lastSeenBefore)
+        DateTime? lastSeenAfter, DateTime? lastSeenBefore,
+        int? scopeCustomerId = null)
     {
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
 
-        var conditions = new List<string> { "n.is_active = 1" };
+        var conditions = new List<string> { };
+
+        if (scopeCustomerId.HasValue)
+            conditions.Add("n.group_id = @ScopeCustomerId");
 
         if (!string.IsNullOrWhiteSpace(customer))
             conditions.Add("n.group_name LIKE @Customer");
@@ -545,6 +567,9 @@ public class Db
             """;
 
         await using var command = new SqlCommand(sql, connection);
+
+        if (scopeCustomerId.HasValue)
+            command.Parameters.AddWithValue("@ScopeCustomerId", scopeCustomerId.Value);
 
         if (!string.IsNullOrWhiteSpace(customer))
             command.Parameters.AddWithValue("@Customer", $"%{customer}%");
@@ -690,7 +715,6 @@ public class Db
                     n.last_seen = @LastSeen
                     AND CAST(ABS(CHECKSUM(n.ciid)) AS bigint) > @LastId
                 ))
-                and n.is_active = 1
             ORDER BY n.last_seen, node_id;
             """;
 
@@ -783,7 +807,6 @@ public class Db
                 ON ea.node_ciid = n.ciid
             WHERE
                 n.group_id = @CustomerId
-                AND n.is_active = 1
                 AND (
                     n.last_seen > @LastSeen
                     OR (

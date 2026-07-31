@@ -15,5 +15,6 @@ export function formatTableDate(value: unknown) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    // timeZone: "UTC",
   });
 }

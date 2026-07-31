@@ -63,9 +63,10 @@ public class GraphService
     public async Task<IEnumerable<string>> FilterNodeCiidsAsync(
         string? customer, string? ip, string? mac,
         DateTime? firstSeenAfter, DateTime? firstSeenBefore,
-        DateTime? lastSeenAfter, DateTime? lastSeenBefore)
+        DateTime? lastSeenAfter, DateTime? lastSeenBefore,
+        int? scopeCustomerId = null)
     {
-        return await db.filterNodeCiidsAsync(customer, ip, mac, firstSeenAfter, firstSeenBefore, lastSeenAfter, lastSeenBefore);
+        return await db.filterNodeCiidsAsync(customer, ip, mac, firstSeenAfter, firstSeenBefore, lastSeenAfter, lastSeenBefore, scopeCustomerId);
     }
 
     private static IEnumerable<NodeSummaryDto> ToNodeSummaryDtos(IEnumerable<NodeSummaryEntity> nodes)

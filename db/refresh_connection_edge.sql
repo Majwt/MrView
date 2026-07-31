@@ -115,20 +115,23 @@ BEGIN
                 b.process_id,
                 b.reporter_ciid,
 
-                source_fqdn = CASE WHEN b.direction = 'INCOMING' THEN b.target_fqdn_raw ELSE b.source_fqdn_raw END,
-                source_ipv4 = CASE WHEN b.direction = 'INCOMING' THEN b.target_address_ipv4 ELSE b.source_address_ipv4 END,
-                source_ciid_base = b.source_ciid_raw,
-                source_port = CASE WHEN b.direction = 'INCOMING' THEN b.target_port_raw ELSE b.source_port_raw END,
+                -- raw rows are always source=client, target=server; no positional flip needed
+                source_fqdn = b.source_fqdn_raw,
+                source_ipv4 = b.source_address_ipv4,
+                -- OUTGOING: reporter is source (client); INCOMING: reporter is target (server)
+                source_ciid_base = CASE WHEN b.direction = 'INCOMING' THEN NULL               ELSE b.source_ciid_raw  END,
+                source_port = b.source_port_raw,
 
-                target_fqdn = CASE WHEN b.direction = 'INCOMING' THEN b.source_fqdn_raw ELSE b.target_fqdn_raw END,
-                target_ipv4 = CASE WHEN b.direction = 'INCOMING' THEN b.source_address_ipv4 ELSE b.target_address_ipv4 END,
-                target_ciid_base = b.target_ciid_raw,
-                target_port = CASE WHEN b.direction = 'INCOMING' THEN b.source_port_raw ELSE b.target_port_raw END,
+                target_fqdn = b.target_fqdn_raw,
+                target_ipv4 = b.target_address_ipv4,
+                target_ciid_base = CASE WHEN b.direction = 'INCOMING' THEN b.reporter_ciid    ELSE b.target_ciid_raw  END,
+                target_port = b.target_port_raw,
 
-                source_ephemeral_port_start = CASE WHEN b.direction = 'INCOMING' THEN b.target_ephemeral_port_start_raw ELSE b.source_ephemeral_port_start_raw END,
-                source_ephemeral_port_end = CASE WHEN b.direction = 'INCOMING' THEN b.target_ephemeral_port_end_raw ELSE b.source_ephemeral_port_end_raw END,
-                target_ephemeral_port_start = CASE WHEN b.direction = 'INCOMING' THEN b.source_ephemeral_port_start_raw ELSE b.target_ephemeral_port_start_raw END,
-                target_ephemeral_port_end = CASE WHEN b.direction = 'INCOMING' THEN b.source_ephemeral_port_end_raw ELSE b.target_ephemeral_port_end_raw END
+                -- INCOMING: we only know the server's ephemeral range, not the client's; use defaults for source
+                source_ephemeral_port_start = CASE WHEN b.direction = 'INCOMING' THEN 49152 ELSE b.source_ephemeral_port_start_raw END,
+                source_ephemeral_port_end   = CASE WHEN b.direction = 'INCOMING' THEN 65535 ELSE b.source_ephemeral_port_end_raw   END,
+                target_ephemeral_port_start = b.target_ephemeral_port_start_raw,
+                target_ephemeral_port_end   = b.target_ephemeral_port_end_raw
             FROM raw_base b
         ),
         normalized_resolved AS (
@@ -199,7 +202,10 @@ BEGIN
                     ml.fqdn
                 FROM managed_lookup ml
                 WHERE ml.fqdn = n.source_fqdn
-                   OR ml.short_name = n.source_fqdn
+                   OR (ml.short_name = n.source_fqdn AND EXISTS (
+                       SELECT 1 FROM dbo.node_interface ni
+                       WHERE ni.ciid = ml.ciid AND ni.address_ipv4 = n.source_ipv4
+                   ))
                 ORDER BY
                     CASE WHEN ml.fqdn = n.source_fqdn THEN 0 ELSE 1 END,
                     CASE WHEN ml.fqdn LIKE '%.%' THEN 0 ELSE 1 END
@@ -210,7 +216,10 @@ BEGIN
                     ml.fqdn
                 FROM managed_lookup ml
                 WHERE ml.fqdn = n.target_fqdn
-                   OR ml.short_name = n.target_fqdn
+                   OR (ml.short_name = n.target_fqdn AND EXISTS (
+                       SELECT 1 FROM dbo.node_interface ni
+                       WHERE ni.ciid = ml.ciid AND ni.address_ipv4 = n.target_ipv4
+                   ))
                 ORDER BY
                     CASE WHEN ml.fqdn = n.target_fqdn THEN 0 ELSE 1 END,
                     CASE WHEN ml.fqdn LIKE '%.%' THEN 0 ELSE 1 END
@@ -259,6 +268,27 @@ BEGIN
                     END
             FROM normalized_resolved n
         ),
+        -- ensure endpoint_b is always the server: swap when source holds the service port
+        reoriented AS (
+            SELECT
+                source_fqdn             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.target_fqdn             ELSE k.source_fqdn             END,
+                source_ipv4             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.target_ipv4             ELSE k.source_ipv4             END,
+                source_ciid             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.target_ciid             ELSE k.source_ciid             END,
+                source_port             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.target_port             ELSE k.source_port             END,
+                endpoint_a_process_name = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.endpoint_b_process_name ELSE k.endpoint_a_process_name END,
+                endpoint_a_process_id   = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.endpoint_b_process_id   ELSE k.endpoint_a_process_id   END,
+                target_fqdn             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.source_fqdn             ELSE k.target_fqdn             END,
+                target_ipv4             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.source_ipv4             ELSE k.target_ipv4             END,
+                target_ciid             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.source_ciid             ELSE k.target_ciid             END,
+                target_port             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.source_port             ELSE k.target_port             END,
+                endpoint_b_process_name = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.endpoint_a_process_name ELSE k.endpoint_b_process_name END,
+                endpoint_b_process_id   = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.endpoint_a_process_id   ELSE k.endpoint_b_process_id   END,
+                k.protocol,
+                k.service_port,
+                k.DateAdded,
+                k.id
+            FROM keyed k
+        ),
         ranked AS (
             SELECT
                 k.*,
@@ -300,7 +330,7 @@ BEGIN
                         k.DateAdded DESC,
                         k.id DESC
                 )
-            FROM keyed k
+            FROM reoriented k
         ),
         aggregated AS (
             SELECT

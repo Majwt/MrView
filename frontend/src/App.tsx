@@ -2,6 +2,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/s
 import { AppSidebar } from "./components/AppSidebar";
 import { ThemeToggle } from "./components/theme-toggle";
 import { Outlet } from "react-router";
+import { GraphStatsProvider } from "./features/graph/GraphStatsContext";
 
 
 
@@ -11,6 +12,7 @@ export function App() {
 
 
   return (
+    <GraphStatsProvider>
     <SidebarProvider>
       <AppSidebar />
 
@@ -29,6 +31,7 @@ export function App() {
         </main>
       </SidebarInset>
     </SidebarProvider>
+    </GraphStatsProvider>
   );
 }
 
