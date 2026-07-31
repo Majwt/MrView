@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import GraphPage from "./components/GraphPage";
 import LoginPage from "./components/LoginPage";
+import DashboardPage from "./components/DashboardPage";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 
 const settingsPage = () => {
@@ -47,7 +48,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/" element={<ProtectedRoute><App /></ProtectedRoute>}>
-                <Route index element={<GraphPage />} />
+                <Route index element={<DashboardPage />} />
+                <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="graph" element={<GraphPage />} />
                 <Route path="customer/:customerId" element={<AdminRoute><GraphPage /></AdminRoute>} />
                 <Route path="settings" element={settingsPage()} />

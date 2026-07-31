@@ -231,7 +231,7 @@ export default function GraphPage() {
       filters,
       globalSearch,
       selectedNodeFqdn,
-      tableView: "connections",
+      tableView: "nodes",
     });
   }, [filters, globalSearch, selectedNodeFqdn]);
 
@@ -378,7 +378,7 @@ export default function GraphPage() {
   }
 
   return (
-    <>
+    <div className="grid flex-1 grid-rows-2 overflow-hidden">
       {error || isLoading ? (
         <>
           {error && errorDiv()}
@@ -517,6 +517,6 @@ export default function GraphPage() {
         </>
       )}
 
-    </>
+    </div>
   )
 }

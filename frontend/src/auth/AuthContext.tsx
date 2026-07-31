@@ -8,6 +8,8 @@ export interface AuthContextValue {
   token: string | null;
   role: Role | null;
   customerId: number | null;
+  name: string | null;
+  email: string | null;
   isLoading: boolean;
   login: (token?: string) => void;
   logout: () => void;
@@ -56,11 +58,21 @@ function resolveCustomerId(claims: Record<string, unknown>): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function resolveName(claims: Record<string, unknown>): string | null {
+  const raw = claims["name"] ?? claims["preferred_username"] ?? claims["sub"];
+  return typeof raw === "string" ? raw : null;
+}
+
+function resolveEmail(claims: Record<string, unknown>): string | null {
+  const raw = claims["email"];
+  return typeof raw === "string" ? raw : null;
+}
+
 function parseToken(token: string | null) {
-  if (!token) return { token: null, role: null, customerId: null };
+  if (!token) return { token: null, role: null, customerId: null, name: null, email: null };
   const claims = decodeJwtPayload(token);
-  if (!claims) return { token: null, role: null, customerId: null };
-  return { token, role: resolveRole(claims), customerId: resolveCustomerId(claims) };
+  if (!claims) return { token: null, role: null, customerId: null, name: null, email: null };
+  return { token, role: resolveRole(claims), customerId: resolveCustomerId(claims), name: resolveName(claims), email: resolveEmail(claims) };
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -81,7 +93,7 @@ function LocalAuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     _tokenRef = null;
-    setState({ token: null, role: null, customerId: null });
+    setState({ token: null, role: null, customerId: null, name: null, email: null });
   }, []);
 
   return (
@@ -134,7 +146,7 @@ function OidcAuthBridge({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     _tokenRef = null;
-    setLocalState({ token: null, role: null, customerId: null });
+    setLocalState({ token: null, role: null, customerId: null, name: null, email: null });
     void oidc.signoutRedirect();
   }, [oidc]);
 

@@ -1,6 +1,7 @@
 
 import { apiGetText } from "@/api/client";
-import type { Status } from "@/components/AppSidebar";
+
+export type Status = "Healthy" | "Degraded" | "Down";
 
 export function fetchStatus(): Promise<Status> {
   return apiGetText("/healthz");

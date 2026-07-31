@@ -1,8 +1,11 @@
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
+import { Separator } from "./components/ui/separator";
+import { SidebarInset, SidebarProvider } from "./components/ui/sidebar";
 import { AppSidebar } from "./components/AppSidebar";
 import { ThemeToggle } from "./components/theme-toggle";
 import { Outlet } from "react-router";
 import { GraphStatsProvider } from "./features/graph/GraphStatsContext";
+import { SidebarTrigger } from "./components/ui/sidebar";
+import React from "react";
 
 
 
@@ -13,20 +16,27 @@ export function App() {
 
   return (
     <GraphStatsProvider>
-    <SidebarProvider>
+    <SidebarProvider
+      style={{
+        "--sidebar-width": "calc(var(--spacing) * 72)",
+        "--header-height": "calc(var(--spacing) * 12)",
+      } as React.CSSProperties}
+    >
       <AppSidebar />
 
       <SidebarInset>
-        <header className="flex h-14 justify-between items-center gap-2 border-b px-4">
-          <SidebarTrigger />
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-medium "></h1>
+        <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
+          <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
+            <SidebarTrigger className="-ms-1" />
+            <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
+            <h1 className="text-base font-medium">AxiLANswer</h1>
+            <div className="ml-auto">
+              <ThemeToggle />
+            </div>
           </div>
-          <ThemeToggle />
-
         </header>
 
-        <main className="grid h-[calc(100vh-3.5rem)] grid-rows-2 overflow-hidden">
+        <main className="flex flex-1 flex-col overflow-hidden">
           <Outlet />
         </main>
       </SidebarInset>
