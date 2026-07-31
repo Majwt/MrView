@@ -4,6 +4,8 @@ GO
 DROP TABLE IF EXISTS dbo.connection_edge;
 GO
 
+-- One row per (edge_key, observed_date): daily-deduplicated event log.
+-- v_connection_stats aggregates this into one row per edge for the API.
 CREATE TABLE dbo.connection_edge (
     id bigint IDENTITY(1,1) NOT NULL,
 
@@ -24,11 +26,11 @@ CREATE TABLE dbo.connection_edge (
     protocol nvarchar(10) NOT NULL,
     service_port int NULL,
     service_name nvarchar(100) NOT NULL CONSTRAINT DF_connection_edge_service_name DEFAULT ('Unknown'),
-
-    seen_count bigint NOT NULL CONSTRAINT DF_connection_edge_seen_count DEFAULT (0),
-    first_seen datetime2(0) NOT NULL,
-    last_seen datetime2(0) NOT NULL,
     confidence tinyint NOT NULL CONSTRAINT DF_connection_edge_confidence DEFAULT (0),
+
+    raw_seen_count bigint NOT NULL CONSTRAINT DF_connection_edge_raw_seen_count DEFAULT (1),
+    observed_at datetime2(0) NOT NULL,
+    observed_date AS CAST(observed_at AS date) PERSISTED,
 
     edge_key AS
         CONVERT(nvarchar(64), HASHBYTES(
@@ -53,12 +55,12 @@ CREATE TABLE dbo.connection_edge (
 );
 GO
 
-CREATE UNIQUE INDEX UX_connection_edge_edge_key
-ON dbo.connection_edge (edge_key);
+CREATE UNIQUE INDEX UX_connection_edge_edge_key_date
+ON dbo.connection_edge (edge_key, observed_date);
 GO
 
-CREATE INDEX IX_connection_edge_last_seen
-ON dbo.connection_edge (last_seen DESC, id DESC);
+CREATE INDEX IX_connection_edge_observed_date
+ON dbo.connection_edge (observed_date DESC, edge_key);
 GO
 
 CREATE INDEX IX_connection_edge_endpoint_a

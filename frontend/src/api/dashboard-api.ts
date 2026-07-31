@@ -13,16 +13,15 @@ export type ConnectionHistoryPoint = {
   distinct_connections: number;
 };
 
-export type ConnectionRow = {
-  edge_key: string;
-  endpoint_a: string;
-  endpoint_b: string;
-  service_name: string;
-  service_port: number | null;
-  protocol: string;
-  seen_count: number;
+export type NodeRow = {
+  ciid: string;
+  fqdn: string;
+  hostname: string;
+  distinct_edges: number;
+  connection_count: number;
   first_seen: string;
   last_seen: string;
+  group_name: string;
 };
 
 export function fetchDashboardStats(): Promise<DashboardStats> {
@@ -33,6 +32,6 @@ export function fetchConnectionsHistory(days: number): Promise<ConnectionHistory
   return apiGet<ConnectionHistoryPoint[]>(`/dashboard/connections-history?days=${days}`);
 }
 
-export function fetchTopConnections(limit = 100): Promise<ConnectionRow[]> {
-  return apiGet<ConnectionRow[]>(`/dashboard/top-connections?limit=${limit}`);
+export function fetchDashboardNodes(limit = 100): Promise<NodeRow[]> {
+  return apiGet<NodeRow[]>(`/dashboard/nodes?limit=${limit}`);
 }

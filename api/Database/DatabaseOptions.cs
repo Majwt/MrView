@@ -5,6 +5,7 @@ namespace Api.Database;
 public sealed class DatabaseOptions
 {
     public required string EdgeTable { get; init; }
+    public required string EdgeStatsView { get; init; }
     public required string NodeTable { get; init; }
     public required string InterfaceTable { get; init; }
     public required string PortsTable { get; init; }
@@ -19,6 +20,8 @@ public sealed class DatabaseOptions
     {
         bool EdgeTableValid = TableRegex.IsMatch(EdgeTable);
         Console.WriteLine($"EdgeTable: {EdgeTable}, Valid: {EdgeTableValid}");
+        bool EdgeStatsViewValid = TableRegex.IsMatch(EdgeStatsView);
+        Console.WriteLine($"EdgeStatsView: {EdgeStatsView}, Valid: {EdgeStatsViewValid}");
         bool NodeTableValid = TableRegex.IsMatch(NodeTable);
         Console.WriteLine($"NodeTable: {NodeTable}, Valid: {NodeTableValid}");
         bool InterfaceTableValid = TableRegex.IsMatch(InterfaceTable);
@@ -28,6 +31,6 @@ public sealed class DatabaseOptions
         bool SeenCountThresholdValid = SeenCountThreshold >= 0;
         Console.WriteLine($"SeenCountThreshold: {SeenCountThreshold}, Valid: {SeenCountThresholdValid}");
 
-        return EdgeTableValid && NodeTableValid && InterfaceTableValid && PortsTableValid && SeenCountThresholdValid;
+        return EdgeTableValid && EdgeStatsViewValid && NodeTableValid && InterfaceTableValid && PortsTableValid && SeenCountThresholdValid;
     }
 }

@@ -18,4 +18,7 @@ public class DashboardService
 
     public Task<IEnumerable<ConnectionRow>> GetTopConnectionsAsync(int limit, int customerId = -1)
         => _db.GetTopConnectionsAsync(limit, customerId);
+
+    public Task<IEnumerable<NodeRow>> GetDashboardNodesAsync(int limit, int customerId = -1)
+        => _db.GetDashboardNodesAsync(limit, customerId);
 }

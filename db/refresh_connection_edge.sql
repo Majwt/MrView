@@ -299,7 +299,8 @@ BEGIN
                         k.target_fqdn,
                         k.target_ipv4,
                         k.protocol,
-                        ISNULL(k.service_port, -1)
+                        ISNULL(k.service_port, -1),
+                        CAST(k.DateAdded AS date)
                     ORDER BY
                         k.DateAdded DESC,
                         k.id DESC
@@ -311,7 +312,8 @@ BEGIN
                         k.target_fqdn,
                         k.target_ipv4,
                         k.protocol,
-                        ISNULL(k.service_port, -1)
+                        ISNULL(k.service_port, -1),
+                        CAST(k.DateAdded AS date)
                     ORDER BY
                         CASE WHEN k.endpoint_a_process_name IS NOT NULL THEN 0 ELSE 1 END,
                         k.DateAdded DESC,
@@ -324,7 +326,8 @@ BEGIN
                         k.target_fqdn,
                         k.target_ipv4,
                         k.protocol,
-                        ISNULL(k.service_port, -1)
+                        ISNULL(k.service_port, -1),
+                        CAST(k.DateAdded AS date)
                     ORDER BY
                         CASE WHEN k.endpoint_b_process_name IS NOT NULL THEN 0 ELSE 1 END,
                         k.DateAdded DESC,
@@ -347,6 +350,7 @@ BEGIN
                 protocol,
                 service_port,
 
+                observation_date = CAST(MIN(DateAdded) AS date),
                 seen_count = COUNT_BIG(*),
                 first_seen = MIN(DateAdded),
                 last_seen = MAX(DateAdded),
@@ -365,7 +369,8 @@ BEGIN
                 target_fqdn,
                 target_ipv4,
                 protocol,
-                service_port
+                service_port,
+                CAST(DateAdded AS date)
         ),
         source_rows AS (
             SELECT
@@ -386,6 +391,7 @@ BEGIN
                 a.protocol,
                 a.service_port,
                 service_name = COALESCE(port_lookup.service_name, 'Unknown'),
+                a.observation_date,
                 a.seen_count,
                 a.first_seen,
                 a.last_seen,
@@ -433,6 +439,7 @@ BEGIN
                     ISNULL(CONVERT(nvarchar(20), source.service_port), '')
                 )
             ), 2)
+           AND target.observed_date = source.observation_date
 
         WHEN MATCHED THEN
             UPDATE SET
@@ -451,9 +458,8 @@ BEGIN
                 protocol = source.protocol,
                 service_port = source.service_port,
                 service_name = source.service_name,
-                seen_count = source.seen_count,
-                first_seen = source.first_seen,
-                last_seen = source.last_seen,
+                raw_seen_count = target.raw_seen_count + source.seen_count,
+                observed_at = source.last_seen,
                 confidence = source.confidence
 
         WHEN NOT MATCHED THEN
@@ -473,9 +479,8 @@ BEGIN
                 protocol,
                 service_port,
                 service_name,
-                seen_count,
-                first_seen,
-                last_seen,
+                raw_seen_count,
+                observed_at,
                 confidence
             )
             VALUES (
@@ -495,7 +500,6 @@ BEGIN
                 source.service_port,
                 source.service_name,
                 source.seen_count,
-                source.first_seen,
                 source.last_seen,
                 source.confidence
             );

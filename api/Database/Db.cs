@@ -10,6 +10,7 @@ public class Db
     public string ConnectionString { get; }
     private readonly TableIdentifier _nodesTable;
     private readonly TableIdentifier _edgesTable;
+    private readonly TableIdentifier _edgeStatsView;
     private readonly TableIdentifier _interfacesTable;
     private readonly TableIdentifier _portsTable;
     private int SeenCountThreshold { get; }
@@ -25,6 +26,7 @@ public class Db
 
         _nodesTable = TableIdentifier.Parse(dbOptions.NodeTable);
         _edgesTable = TableIdentifier.Parse(dbOptions.EdgeTable);
+        _edgeStatsView = TableIdentifier.Parse(dbOptions.EdgeStatsView);
         _interfacesTable = TableIdentifier.Parse(dbOptions.InterfaceTable);
         _portsTable = TableIdentifier.Parse(dbOptions.PortsTable);
 
@@ -85,7 +87,7 @@ public class Db
                 e.first_seen,
                 e.last_seen,
                 e.edge_key
-            FROM {_edgesTable} e
+            FROM {_edgeStatsView} e
             LEFT JOIN {_nodesTable} na
                 ON na.ciid = e.endpoint_a_ciid
             LEFT JOIN {_nodesTable} nb
@@ -149,7 +151,7 @@ public class Db
                 e.first_seen,
                 e.last_seen,
                 e.edge_key
-            FROM {_edgesTable} e
+            FROM {_edgeStatsView} e
             OUTER APPLY (
                 SELECT TOP (1)
                     p.service_name
@@ -301,13 +303,13 @@ public class Db
                     connection_count = SUM(seen_count)
                 FROM (
                     SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
 
                     UNION ALL
 
                     SELECT e.endpoint_b_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
                       AND e.endpoint_b_ciid <> e.endpoint_a_ciid
                 ) x
@@ -361,7 +363,7 @@ public class Db
             WITH customer_edge_ciids AS (
                 -- All node ciids that appear as an endpoint in any edge involving this customer
                 SELECT e.endpoint_a_ciid AS ciid
-                FROM {_edgesTable} e
+                FROM {_edgeStatsView} e
                 LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
                 LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
                 WHERE e.seen_count > @SeenCountThreshold
@@ -372,7 +374,7 @@ public class Db
                 UNION
 
                 SELECT e.endpoint_b_ciid
-                FROM {_edgesTable} e
+                FROM {_edgeStatsView} e
                 LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
                 LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
                 WHERE e.seen_count > @SeenCountThreshold
@@ -387,13 +389,13 @@ public class Db
                     connection_count = SUM(seen_count)
                 FROM (
                     SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
 
                     UNION ALL
 
                     SELECT e.endpoint_b_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
                       AND e.endpoint_b_ciid <> e.endpoint_a_ciid
                 ) x
@@ -484,13 +486,13 @@ public class Db
                     connection_count = SUM(seen_count)
                 FROM (
                     SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
 
                     UNION ALL
 
                     SELECT e.endpoint_b_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
                       AND e.endpoint_b_ciid <> e.endpoint_a_ciid
                 ) x
@@ -680,13 +682,13 @@ public class Db
                     connection_count = SUM(seen_count)
                 FROM (
                     SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
 
                     UNION ALL
 
                     SELECT e.endpoint_b_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
                       AND e.endpoint_b_ciid <> e.endpoint_a_ciid
                 ) x
@@ -776,13 +778,13 @@ public class Db
                     connection_count = SUM(seen_count)
                 FROM (
                     SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
 
                     UNION ALL
 
                     SELECT e.endpoint_b_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
                       AND e.endpoint_b_ciid <> e.endpoint_a_ciid
                 ) x
@@ -940,7 +942,7 @@ public class Db
             SELECT
                 total_edges = (
                     SELECT COUNT_BIG(*)
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     {customerJoin}
                     WHERE 1=1 {customerEdgeFilter}
                 ),
@@ -951,13 +953,13 @@ public class Db
                 ),
                 total_seen_count = (
                     SELECT ISNULL(SUM(e.seen_count), 0)
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     {customerJoin}
                     WHERE 1=1 {customerEdgeFilter}
                 ),
                 new_edges_last_7_days = (
                     SELECT COUNT_BIG(*)
-                    FROM {_edgesTable} e
+                    FROM {_edgeStatsView} e
                     {customerJoin}
                     WHERE e.first_seen >= DATEADD(DAY, -7, GETUTCDATE()) {customerEdgeFilter}
                 );
@@ -992,15 +994,15 @@ public class Db
 
         var sql = $"""
             SELECT
-                date = CAST(e.last_seen AS DATE),
-                total_connections = SUM(e.seen_count),
-                distinct_connections = COUNT_BIG(*)
+                date = e.observed_date,
+                total_connections = SUM(e.raw_seen_count),
+                distinct_connections = COUNT(DISTINCT e.edge_key)
             FROM {_edgesTable} e
             {customerJoin}
-            WHERE e.last_seen >= DATEADD(DAY, -@Days, GETUTCDATE())
+            WHERE e.observed_date >= CAST(DATEADD(DAY, -@Days, GETUTCDATE()) AS date)
               {customerFilter}
-            GROUP BY CAST(e.last_seen AS DATE)
-            ORDER BY CAST(e.last_seen AS DATE) ASC;
+            GROUP BY e.observed_date
+            ORDER BY e.observed_date ASC;
             """;
 
         await using var command = new SqlCommand(sql, connection);
@@ -1050,7 +1052,7 @@ public class Db
                 e.seen_count,
                 e.first_seen,
                 e.last_seen
-            FROM {_edgesTable} e
+            FROM {_edgeStatsView} e
             OUTER APPLY (
                 SELECT TOP (1) p.service_name
                 FROM {_portsTable} p
@@ -1093,6 +1095,89 @@ public class Db
                 SeenCount: reader.GetInt64(seenCountOrdinal),
                 FirstSeen: EnsureUtc(reader.GetDateTime(firstSeenOrdinal)),
                 LastSeen: EnsureUtc(reader.GetDateTime(lastSeenOrdinal))
+            ));
+        }
+
+        return rows;
+    }
+
+    public async Task<IEnumerable<NodeRow>> GetDashboardNodesAsync(int limit, int customerId = -1)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        var customerFilter = customerId != -1 ? "AND n.group_id = @CustomerId" : "";
+
+        var sql = $"""
+            WITH edge_agg AS (
+                SELECT
+                    node_ciid,
+                    edge_count      = COUNT_BIG(*),
+                    connection_count = SUM(seen_count)
+                FROM (
+                    SELECT e.endpoint_a_ciid AS node_ciid, e.edge_key, e.seen_count
+                    FROM {_edgeStatsView} e
+                    WHERE e.seen_count > @SeenCountThreshold
+
+                    UNION ALL
+
+                    SELECT e.endpoint_b_ciid AS node_ciid, e.edge_key, e.seen_count
+                    FROM {_edgeStatsView} e
+                    WHERE e.seen_count > @SeenCountThreshold
+                      AND e.endpoint_b_ciid <> e.endpoint_a_ciid
+                ) x
+                WHERE node_ciid IS NOT NULL
+                GROUP BY node_ciid
+            )
+            SELECT TOP (@Limit)
+                n.ciid,
+                fqdn       = COALESCE(n.fqdn, n.ciid),
+                hostname   = CASE
+                                 WHEN CHARINDEX('.', COALESCE(n.fqdn, '')) > 0
+                                 THEN LEFT(n.fqdn, CHARINDEX('.', n.fqdn) - 1)
+                                 ELSE COALESCE(n.fqdn, n.ciid)
+                             END,
+                distinct_edges   = COALESCE(ea.edge_count, 0),
+                connection_count = COALESCE(ea.connection_count, 0),
+                n.first_seen,
+                n.last_seen,
+                group_name = COALESCE(n.group_name, '')
+            FROM {_nodesTable} n
+            LEFT JOIN edge_agg ea ON ea.node_ciid = n.ciid
+            WHERE n.is_active = 1
+              {customerFilter}
+            ORDER BY connection_count DESC;
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Limit", limit);
+        command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
+        if (customerId != -1)
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        var rows = new List<NodeRow>();
+        var ciidOrdinal       = reader.GetOrdinal("ciid");
+        var fqdnOrdinal       = reader.GetOrdinal("fqdn");
+        var hostnameOrdinal   = reader.GetOrdinal("hostname");
+        var edgesOrdinal      = reader.GetOrdinal("distinct_edges");
+        var connOrdinal       = reader.GetOrdinal("connection_count");
+        var firstSeenOrdinal  = reader.GetOrdinal("first_seen");
+        var lastSeenOrdinal   = reader.GetOrdinal("last_seen");
+        var groupNameOrdinal  = reader.GetOrdinal("group_name");
+
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new NodeRow(
+                Ciid:           reader.GetString(ciidOrdinal),
+                Fqdn:           reader.GetString(fqdnOrdinal),
+                Hostname:       reader.GetString(hostnameOrdinal),
+                DistinctEdges:  reader.GetInt64(edgesOrdinal),
+                ConnectionCount: reader.GetInt64(connOrdinal),
+                FirstSeen:      EnsureUtc(reader.GetDateTime(firstSeenOrdinal)),
+                LastSeen:       EnsureUtc(reader.GetDateTime(lastSeenOrdinal)),
+                GroupName:      reader.GetString(groupNameOrdinal)
             ));
         }
 

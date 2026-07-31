@@ -5,16 +5,16 @@ import { SectionCards } from "@/components/section-cards";
 import {
   fetchDashboardStats,
   fetchConnectionsHistory,
-  fetchTopConnections,
+  fetchDashboardNodes,
   type DashboardStats,
   type ConnectionHistoryPoint,
-  type ConnectionRow,
+  type NodeRow,
 } from "@/api/dashboard-api";
 
 export default function DashboardPage() {
   const [stats, setStats] = React.useState<DashboardStats | null>(null);
   const [history, setHistory] = React.useState<ConnectionHistoryPoint[]>([]);
-  const [connections, setConnections] = React.useState<ConnectionRow[]>([]);
+  const [nodes, setNodes] = React.useState<NodeRow[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -22,12 +22,12 @@ export default function DashboardPage() {
     Promise.all([
       fetchDashboardStats(),
       fetchConnectionsHistory(90),
-      fetchTopConnections(100),
+      fetchDashboardNodes(100),
     ])
-      .then(([s, h, c]) => {
+      .then(([s, h, n]) => {
         setStats(s);
         setHistory(h);
-        setConnections(c);
+        setNodes(n);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -43,7 +43,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
         <SectionCards stats={stats} loading={loading} />
         <ChartAreaInteractive data={chartData} loading={loading} />
-        <DataTable data={connections} />
+        <DataTable data={nodes} />
       </div>
     </div>
   );

@@ -390,6 +390,23 @@ app.MapGet(
     }
 ).RequireAuthorization();
 
+app.MapGet(
+    "/api/dashboard/nodes",
+    async (ClaimsPrincipal user, int? limit, DashboardService dashboardService) =>
+    {
+        var effectiveLimit = limit is > 0 ? limit.Value : 100;
+
+        if (user.IsInRole("Admin"))
+            return Results.Ok(await dashboardService.GetDashboardNodesAsync(effectiveLimit));
+
+        var customerIdClaim = Jwt.CustomerIdClaim(user);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+            return Results.Forbid();
+
+        return Results.Ok(await dashboardService.GetDashboardNodesAsync(effectiveLimit, customerId));
+    }
+).RequireAuthorization();
+
 try
 {
     app.Run();

@@ -7,7 +7,7 @@ import { applyGraphDelta } from "@/features/graph/apply-graph-delta";
 import { normalizeGraphSnapshot } from "@/features/graph/normalize-graph-snapshot";
 import type { GraphSnapshot } from "@/features/graph/types";
 import { readUrlState, writeUrlState } from "@/features/url-state";
-import { X } from "lucide-react";
+import { X, Maximize2, Minimize2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
 import FilterBar from "./FilterBar";
 import GraphQuickFilters, { type QuickFilters } from "./GraphQuickFilters";
@@ -68,6 +68,9 @@ export default function GraphPage() {
   const [, startTransition] = useTransition();
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialUrlState.filters);
   const filterSuggestions = useMemo(() => buildFilterSuggestions(snapshot), [snapshot]);
+
+  const graphSectionRef = useRef<HTMLElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const connectionFilteredSnapshot = useMemo(() => {
     if (!snapshot) return null;
@@ -225,6 +228,14 @@ export default function GraphPage() {
 
     applyFilterChange();
   }, [quickFilters]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    function handleChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener("fullscreenchange", handleChange);
+    return () => document.removeEventListener("fullscreenchange", handleChange);
+  }, []);
 
   useEffect(() => {
     writeUrlState({
@@ -387,7 +398,7 @@ export default function GraphPage() {
       ) : (
         <>
 
-          <section className="relative flex min-h-0 border-b">
+          <section ref={graphSectionRef} className="relative flex min-h-0 border-b">
             <div className="relative flex-1 min-h-0">
               <GraphQuickFilters
                 quickFilters={quickFilters}
@@ -398,6 +409,20 @@ export default function GraphPage() {
                   setQuickFilters((prev) => ({ ...prev, staleThresholdHours: days }))
                 }
               />
+              <button
+                type="button"
+                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                className="absolute top-2 right-2 z-20 rounded-md border bg-background/80 p-1.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                onClick={() => {
+                  if (!document.fullscreenElement) {
+                    graphSectionRef.current?.requestFullscreen();
+                  } else {
+                    document.exitFullscreen();
+                  }
+                }}
+              >
+                {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              </button>
               {snapshot ? (
                 <GraphViewD3
                   graphData={snapshot}

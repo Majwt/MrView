@@ -6,6 +6,7 @@ import {
   useReactTable,
   type ColumnDef,
   type SortingState,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import { useState } from "react";
 
@@ -16,6 +17,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Columns3Icon, ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type DataTableProps<TData, TValue> = {
@@ -40,6 +49,7 @@ export function DataTable<TData, TValue>({
   onRowHoverChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [uncontrolledGlobalFilter, setUncontrolledGlobalFilter] = useState("");
   const globalFilter = controlledGlobalFilter ?? uncontrolledGlobalFilter;
   const setGlobalFilter = setControlledGlobalFilter ?? setUncontrolledGlobalFilter;
@@ -50,16 +60,47 @@ export function DataTable<TData, TValue>({
     state: {
       sorting,
       globalFilter,
+      columnVisibility,
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
   });
 
+  const hidableColumns = table
+    .getAllColumns()
+    .filter((col) => typeof col.accessorFn !== "undefined" && col.getCanHide());
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col ">
+    <div className="flex min-h-0 flex-1 flex-col">
+      {hidableColumns.length > 0 && (
+        <div className="flex justify-end pb-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs">
+                <Columns3Icon className="mr-1 size-3" />
+                Columns
+                <ChevronDownIcon className="ml-1 size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              {hidableColumns.map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  className="capitalize"
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                >
+                  {column.id}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">
         <table className="w-full caption-bottom  text-sm">
           <TableHeader className="sticky top-0 z-10 bg-background">
