@@ -42,6 +42,7 @@ builder
 
 builder.Services.AddScoped<GraphService>();
 builder.Services.AddScoped<CustomerService>();
+builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<Db>();
 
 builder.Logging.ClearProviders();
@@ -339,6 +340,55 @@ app.MapGet(
     "/api/customers",
     async (CustomerService customerService) => await customerService.GetCustomerAsync()
 ).RequireAuthorization("AdminOnly");
+
+app.MapGet(
+    "/api/dashboard/stats",
+    async (ClaimsPrincipal user, DashboardService dashboardService) =>
+    {
+        if (user.IsInRole("Admin"))
+            return Results.Ok(await dashboardService.GetStatsAsync());
+
+        var customerIdClaim = Jwt.CustomerIdClaim(user);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+            return Results.Forbid();
+
+        return Results.Ok(await dashboardService.GetStatsAsync(customerId));
+    }
+).RequireAuthorization();
+
+app.MapGet(
+    "/api/dashboard/connections-history",
+    async (ClaimsPrincipal user, int? days, DashboardService dashboardService) =>
+    {
+        var effectiveDays = days is > 0 ? days.Value : 90;
+
+        if (user.IsInRole("Admin"))
+            return Results.Ok(await dashboardService.GetConnectionsHistoryAsync(effectiveDays));
+
+        var customerIdClaim = Jwt.CustomerIdClaim(user);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+            return Results.Forbid();
+
+        return Results.Ok(await dashboardService.GetConnectionsHistoryAsync(effectiveDays, customerId));
+    }
+).RequireAuthorization();
+
+app.MapGet(
+    "/api/dashboard/top-connections",
+    async (ClaimsPrincipal user, int? limit, DashboardService dashboardService) =>
+    {
+        var effectiveLimit = limit is > 0 ? limit.Value : 100;
+
+        if (user.IsInRole("Admin"))
+            return Results.Ok(await dashboardService.GetTopConnectionsAsync(effectiveLimit));
+
+        var customerIdClaim = Jwt.CustomerIdClaim(user);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+            return Results.Forbid();
+
+        return Results.Ok(await dashboardService.GetTopConnectionsAsync(effectiveLimit, customerId));
+    }
+).RequireAuthorization();
 
 try
 {

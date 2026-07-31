@@ -920,4 +920,182 @@ public class Db
 
         return customers.ToArray();
     }
+
+    public async Task<DashboardStats> GetDashboardStatsAsync(int customerId = -1)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        var customerJoin = customerId != -1
+            ? $"LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid"
+            : "";
+        var customerEdgeFilter = customerId != -1
+            ? "AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)"
+            : "";
+        var customerNodeFilter = customerId != -1
+            ? "AND group_id = @CustomerId"
+            : "";
+
+        var sql = $"""
+            SELECT
+                total_edges = (
+                    SELECT COUNT_BIG(*)
+                    FROM {_edgesTable} e
+                    {customerJoin}
+                    WHERE 1=1 {customerEdgeFilter}
+                ),
+                active_nodes = (
+                    SELECT COUNT_BIG(*)
+                    FROM {_nodesTable}
+                    WHERE is_active = 1 {customerNodeFilter}
+                ),
+                total_seen_count = (
+                    SELECT ISNULL(SUM(e.seen_count), 0)
+                    FROM {_edgesTable} e
+                    {customerJoin}
+                    WHERE 1=1 {customerEdgeFilter}
+                ),
+                new_edges_last_7_days = (
+                    SELECT COUNT_BIG(*)
+                    FROM {_edgesTable} e
+                    {customerJoin}
+                    WHERE e.first_seen >= DATEADD(DAY, -7, GETUTCDATE()) {customerEdgeFilter}
+                );
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        if (customerId != -1)
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        return new DashboardStats(
+            TotalEdges: reader.GetInt64(reader.GetOrdinal("total_edges")),
+            ActiveNodes: reader.GetInt64(reader.GetOrdinal("active_nodes")),
+            TotalSeenCount: reader.GetInt64(reader.GetOrdinal("total_seen_count")),
+            NewEdgesLast7Days: reader.GetInt64(reader.GetOrdinal("new_edges_last_7_days"))
+        );
+    }
+
+    public async Task<IEnumerable<ConnectionHistoryPoint>> GetConnectionsHistoryAsync(int days, int customerId = -1)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        var customerJoin = customerId != -1
+            ? $"LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid"
+            : "";
+        var customerFilter = customerId != -1
+            ? "AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)"
+            : "";
+
+        var sql = $"""
+            SELECT
+                date = CAST(e.last_seen AS DATE),
+                total_connections = SUM(e.seen_count),
+                distinct_connections = COUNT_BIG(*)
+            FROM {_edgesTable} e
+            {customerJoin}
+            WHERE e.last_seen >= DATEADD(DAY, -@Days, GETUTCDATE())
+              {customerFilter}
+            GROUP BY CAST(e.last_seen AS DATE)
+            ORDER BY CAST(e.last_seen AS DATE) ASC;
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Days", days);
+        if (customerId != -1)
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        var points = new List<ConnectionHistoryPoint>();
+        var dateOrdinal = reader.GetOrdinal("date");
+        var totalOrdinal = reader.GetOrdinal("total_connections");
+        var distinctOrdinal = reader.GetOrdinal("distinct_connections");
+
+        while (await reader.ReadAsync())
+        {
+            points.Add(new ConnectionHistoryPoint(
+                Date: EnsureUtc(reader.GetDateTime(dateOrdinal)),
+                TotalConnections: reader.GetInt64(totalOrdinal),
+                DistinctConnections: reader.GetInt64(distinctOrdinal)
+            ));
+        }
+
+        return points;
+    }
+
+    public async Task<IEnumerable<ConnectionRow>> GetTopConnectionsAsync(int limit, int customerId = -1)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        var customerJoin = customerId != -1
+            ? $"LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid"
+            : "";
+        var customerFilter = customerId != -1
+            ? "AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)"
+            : "";
+
+        var sql = $"""
+            SELECT TOP (@Limit)
+                e.edge_key,
+                e.endpoint_a_fqdn,
+                e.endpoint_b_fqdn,
+                service_name = COALESCE(ps.service_name, 'Unknown'),
+                e.service_port,
+                e.protocol,
+                e.seen_count,
+                e.first_seen,
+                e.last_seen
+            FROM {_edgesTable} e
+            OUTER APPLY (
+                SELECT TOP (1) p.service_name
+                FROM {_portsTable} p
+                WHERE p.port_number = e.service_port
+                  AND (p.protocol = e.protocol OR p.protocol = 'any')
+                ORDER BY CASE WHEN p.protocol = e.protocol THEN 0 ELSE 1 END
+            ) ps
+            {customerJoin}
+            WHERE 1=1 {customerFilter}
+            ORDER BY e.seen_count DESC;
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Limit", limit);
+        if (customerId != -1)
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        var rows = new List<ConnectionRow>();
+        var edgeKeyOrdinal = reader.GetOrdinal("edge_key");
+        var endpointAOrdinal = reader.GetOrdinal("endpoint_a_fqdn");
+        var endpointBOrdinal = reader.GetOrdinal("endpoint_b_fqdn");
+        var serviceNameOrdinal = reader.GetOrdinal("service_name");
+        var servicePortOrdinal = reader.GetOrdinal("service_port");
+        var protocolOrdinal = reader.GetOrdinal("protocol");
+        var seenCountOrdinal = reader.GetOrdinal("seen_count");
+        var firstSeenOrdinal = reader.GetOrdinal("first_seen");
+        var lastSeenOrdinal = reader.GetOrdinal("last_seen");
+
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new ConnectionRow(
+                EdgeKey: reader.GetString(edgeKeyOrdinal),
+                EndpointA: reader.GetString(endpointAOrdinal),
+                EndpointB: reader.GetString(endpointBOrdinal),
+                ServiceName: reader.GetString(serviceNameOrdinal),
+                ServicePort: reader.IsDBNull(servicePortOrdinal) ? null : reader.GetInt32(servicePortOrdinal),
+                Protocol: reader.IsDBNull(protocolOrdinal) ? "unknown" : reader.GetString(protocolOrdinal),
+                SeenCount: reader.GetInt64(seenCountOrdinal),
+                FirstSeen: EnsureUtc(reader.GetDateTime(firstSeenOrdinal)),
+                LastSeen: EnsureUtc(reader.GetDateTime(lastSeenOrdinal))
+            ));
+        }
+
+        return rows;
+    }
 }
