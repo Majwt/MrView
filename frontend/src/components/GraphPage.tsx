@@ -5,7 +5,7 @@ import { buildFilterSuggestions } from "@/features/filters/filter-suggestions";
 import { filtersReducer } from "@/features/filters/filters-reducer";
 import { applyGraphDelta } from "@/features/graph/apply-graph-delta";
 import { normalizeGraphSnapshot } from "@/features/graph/normalize-graph-snapshot";
-import type { GraphSnapshot } from "@/features/graph/types";
+import type { GraphEdge, GraphSnapshot } from "@/features/graph/types";
 import { readUrlState, writeUrlState } from "@/features/url-state";
 import { X, Maximize2, Minimize2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
@@ -13,7 +13,6 @@ import FilterBar from "./FilterBar";
 import GraphQuickFilters, { type QuickFilters } from "./GraphQuickFilters";
 import GraphViewD3 from "./GraphViewD3";
 import NodeDetailsPanel from "./NodeDetailsPanel";
-import { Drawer, DrawerContent } from "./ui/drawer";
 import { type TableConnection, connectionColumns } from "./table/connection-columns";
 import { DataTable } from "./table/data-table";
 
@@ -35,6 +34,8 @@ export default function GraphPage() {
   const [snapshot, setSnapshot] = useState<GraphSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fullEdges, setFullEdges] = useState<GraphEdge[] | null>(null);
+  const [isLoadingEdges, setIsLoadingEdges] = useState(true);
   const [selectedNodeFqdn, setSelectedNodeFqdn] = useState<string | null>(
     initialUrlState.selectedNodeFqdn,
   );
@@ -72,6 +73,40 @@ export default function GraphPage() {
   const filterSuggestions = useMemo(() => buildFilterSuggestions(snapshot), [snapshot]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [asideWidth, setAsideWidth] = useState(440);
+  const [tableHeight, setTableHeight] = useState(260);
+
+  function startAsideResize(e: React.MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = asideWidth;
+    function onMove(ev: MouseEvent) {
+      const delta = startX - ev.clientX;
+      setAsideWidth(Math.max(220, Math.min(700, startWidth + delta)));
+    }
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function startTableResize(e: React.MouseEvent) {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = tableHeight;
+    function onMove(ev: MouseEvent) {
+      const delta = startY - ev.clientY;
+      setTableHeight(Math.max(120, Math.min(700, startHeight + delta)));
+    }
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
   const connectionFilteredSnapshot = useMemo(() => {
     if (!snapshot) return null;
@@ -120,14 +155,34 @@ export default function GraphPage() {
   const contextNode = hoveredNodeFqdn ? nodesByFqdn.get(hoveredNodeFqdn) : undefined;
 
   const tableConnections: TableConnection[] = useMemo(() => {
-    if (connectionSearchedSnapshot == null) return [];
+    if (!fullEdges) return [];
 
-    const edges = selectedNodeFqdn
-      ? connectionSearchedSnapshot.edges.filter(
-        (edge) =>
-          edge.source_fqdn === selectedNodeFqdn || edge.target_fqdn === selectedNodeFqdn,
-      )
-      : connectionSearchedSnapshot.edges;
+    const allowedFqdns = serverFilteredCiids !== null
+      ? new Set(
+          (snapshot?.nodes ?? [])
+            .filter((n) => n.is_placeholder || (n.ciid && serverFilteredCiids.has(n.ciid)))
+            .map((n) => n.fqdn),
+        )
+      : null;
+
+    const q = globalSearch.trim().toLowerCase();
+    let edges = fullEdges;
+
+    if (allowedFqdns) {
+      edges = edges.filter((e) => allowedFqdns.has(e.source_fqdn) && allowedFqdns.has(e.target_fqdn));
+    }
+    if (selectedNodeFqdn) {
+      edges = edges.filter((e) => e.source_fqdn === selectedNodeFqdn || e.target_fqdn === selectedNodeFqdn);
+    }
+    if (q) {
+      edges = edges.filter((e) =>
+        [e.source_fqdn, e.target_fqdn, e.source_ip, e.target_ip,
+         String(e.source_port), String(e.target_port),
+         e.source_process_name, e.target_process_name,
+         e.service_name, String(e.seen_count),
+        ].some((v) => String(v ?? "").toLowerCase().includes(q)),
+      );
+    }
 
     return edges.map((edge) => ({
       id: edge.id,
@@ -145,7 +200,7 @@ export default function GraphPage() {
       firstSeen: edge.first_seen,
       lastSeen: edge.last_seen,
     }));
-  }, [connectionSearchedSnapshot, selectedNodeFqdn]);
+  }, [fullEdges, serverFilteredCiids, selectedNodeFqdn, globalSearch, snapshot?.nodes]);
 
   function selectNodeConnections(fqdn: string) {
     setSelectedNodeFqdn(fqdn);
@@ -159,6 +214,7 @@ export default function GraphPage() {
     async function loadGraph() {
       try {
         setIsLoading(true);
+        setIsLoadingEdges(true);
         setError(null);
 
         const qf = quickFiltersRef.current;
@@ -169,25 +225,24 @@ export default function GraphPage() {
         };
 
         const data = await fetchGraphSnapshot(customerId ? Number(customerId) : null, graphQueryParams);
-        console.log("Fetched graph snapshot");
-
         const snap = normalizeGraphSnapshot({
           nodes: data.upsert_nodes,
           edges: data.upsert_edges,
           cursor: data.cursor,
         });
-        console.log("Normalized graph snapshot");
-
         setSnapshot(snap);
         if (snap.cursor?.last_seen) setLastConnectionUtc(snap.cursor.last_seen);
+        setFullEdges(data.upsert_edges);
       } catch (error) {
         setError(error instanceof Error ? error.message : "Failed to load graph");
       } finally {
         setIsLoading(false);
+        setIsLoadingEdges(false);
       }
     }
 
     setSnapshot(null);
+    setFullEdges(null);
     loadGraph();
   }, [customerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -225,6 +280,8 @@ export default function GraphPage() {
             remove_edge_ids: removeEdgeIds,
           });
         });
+
+        setFullEdges(data.upsert_edges);
       } catch (error) {
         console.error("Failed to apply filter change", error);
       }
@@ -379,25 +436,10 @@ export default function GraphPage() {
       .catch((err) => console.error("Failed to fetch filtered ciids", err));
   }, [filters, SERVER_SIDE_FIELDS]);
 
-  const isLoadingDiv = () => {
-    return <div className="p-6 text-sm text-muted-foreground">Loading graph...</div>;
-  }
-
-  const errorDiv = () => {
-    return <div className="p-6 text-sm text-destructive">{error}</div>;
-  }
-
   return (
-    <div className={`grid flex-1 overflow-hidden ${isFullscreen ? "grid-rows-1" : "grid-rows-2"}`}>
-      {error || isLoading ? (
-        <>
-          {error && errorDiv()}
-          {isLoading && isLoadingDiv()}
-        </>
-      ) : (
-        <>
+    <div className="flex flex-1 flex-col overflow-hidden">
 
-          <section className="relative flex min-h-0 border-b">
+          <section className="relative flex min-h-0 flex-1 border-b">
             <div className="relative flex-1 min-h-0">
               <GraphQuickFilters
                 quickFilters={quickFilters}
@@ -419,7 +461,11 @@ export default function GraphPage() {
               >
                 {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </button>
-              {snapshot ? (
+              {error ? (
+                <div className="p-6 text-sm text-destructive">{error}</div>
+              ) : isLoading ? (
+                <div className="p-6 text-sm text-muted-foreground">Loading graph...</div>
+              ) : snapshot ? (
                 <GraphViewD3
                   graphData={snapshot}
                   visibleEdgeIds={visibleEdgeIds}
@@ -486,30 +532,40 @@ export default function GraphPage() {
                 </>) : null}
               </div>
             </div>
+            {!isFullscreen && (
+              <aside
+                style={{ width: asideWidth }}
+                className="relative shrink-0 border-l overflow-y-auto"
+              >
+                {/* drag handle on the left edge */}
+                <div
+                  className="absolute inset-y-0 left-0 w-1 cursor-col-resize hover:bg-primary/40 active:bg-primary/60 z-10"
+                  onMouseDown={startAsideResize}
+                />
+                {selectedNode ? (
+                  <NodeDetailsPanel
+                    node={selectedNode}
+                    isLoadingDetails={isLoadingNodeDetails}
+                    onBack={() => startTransition(() => setSelectedNodeFqdn(null))}
+                  />
+                ) : (
+                  <div className="p-4 text-sm text-muted-foreground">Select a node to view details.</div>
+                )}
+              </aside>
+            )}
           </section>
 
-          {/* Node details slide-in — no backdrop so the graph remains interactive */}
-          <Drawer
-            open={!!selectedNode}
-            onOpenChange={(open) => { if (!open) startTransition(() => setSelectedNodeFqdn(null)); }}
-            modal={false}
-            direction="right"
-          >
-            <DrawerContent showOverlay={false} className="sm:max-w-[27.5rem] flex flex-col min-h-0">
-              {selectedNode && (
-                <NodeDetailsPanel
-                  node={selectedNode}
-                  isLoadingDetails={isLoadingNodeDetails}
-                  onBack={() => startTransition(() => setSelectedNodeFqdn(null))}
-                />
-              )}
-            </DrawerContent>
-          </Drawer>
-
-          {!isFullscreen && <section className="flex min-h-0 flex-col overflow-hidden p-4">
+          {!isFullscreen && <section className="relative flex flex-col overflow-hidden" style={{ height: tableHeight }}>
+            {/* drag handle on the top edge */}
+            <div
+              className="absolute inset-x-0 top-0 h-1 cursor-row-resize hover:bg-primary/40 active:bg-primary/60 z-10"
+              onMouseDown={startTableResize}
+            />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 pt-3">
             <DataTable
               columns={connectionColumns}
               data={tableConnections}
+              loading={isLoadingEdges}
               getRowHoverId={(row) => row.id}
               hoveredRowIds={hoveredConnectionIds}
               onRowHoverChange={setHoveredConnectionId}
@@ -542,10 +598,8 @@ export default function GraphPage() {
                 </>
               }
             />
+            </div>
           </section>}
-
-        </>
-      )}
 
     </div>
   )

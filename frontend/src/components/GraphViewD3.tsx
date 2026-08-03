@@ -49,6 +49,8 @@ export default function GraphViewD3({
   // adjacency map: nodeFqdn → edge IDs (rebuilt when graph data changes)
   const nodeEdgeMapRef = useRef<Map<string, string[]>>(new Map());
   const topologySignatureRef = useRef({ nodes: "", edges: "" });
+  // tracks which fqdns currently have edges, used by forceX/Y to pin isolated nodes to center
+  const connectedFqdnsRef = useRef(new Set<string>());
   const latestRef = useRef({
     visibleNodeIds,
     visibleEdgeIds,
@@ -120,10 +122,10 @@ export default function GraphViewD3({
           .id((node) => node.fqdn)
           .distance(55),
       )
-      .force("charge", d3.forceManyBody().strength(-80))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("x", d3.forceX(width / 2).strength(0.04))
-      .force("y", d3.forceY(height / 2).strength(0.04))
+      .force("charge", d3.forceManyBody().strength(-60).distanceMax(1000))
+      .force("center", d3.forceCenter(width / 2, height / 2).strength(0.10))
+      .force("x", d3.forceX(width / 2).strength((n) => connectedFqdnsRef.current.has((n as GraphNode).fqdn) ? 0.05 : 0.3))
+      .force("y", d3.forceY(height / 2).strength((n) => connectedFqdnsRef.current.has((n as GraphNode).fqdn) ? 0.05 : 0.3))
       .on("tick", requestRender);
 
     simulationRef.current = simulation;
@@ -332,10 +334,22 @@ export default function GraphViewD3({
     const existingNodes = new Map(nodesRef.current.map((node) => [node.fqdn, node]));
     const cx = dimensionsRef.current.width / 2;
     const cy = dimensionsRef.current.height / 2;
+
+    // Pre-compute which fqdns have edges so isolated nodes get scattered, not stacked at center
+    const connectedFqdns = new Set<string>();
+    for (const edge of graphData.edges) {
+      connectedFqdns.add(edge.source_fqdn);
+      connectedFqdns.add(edge.target_fqdn);
+    }
+    connectedFqdnsRef.current = connectedFqdns;
+
     const nextNodes = graphData.nodes.map((nextNode) => {
       const existingNode = existingNodes.get(nextNode.fqdn);
 
       if (!existingNode) {
+        if (!connectedFqdns.has(nextNode.fqdn)) {
+          return { ...nextNode, x: cx / 2 + Math.random() * cx, y: cy / 2 + Math.random() * cy };
+        }
         return { ...nextNode, x: cx, y: cy };
       }
 

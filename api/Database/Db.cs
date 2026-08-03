@@ -204,6 +204,145 @@ public class Db
         return await ParseEdgesFromReader(reader);
     }
 
+    // Returns one row per directed fqdn→fqdn pair. Cursor is based on MIN(first_seen) per pair.
+    public async Task<IEnumerable<EdgeEntity>> getDistinctEdgesAsync(GraphCursor cursor, GraphQueryParams queryParams)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        var activeFilter = queryParams.ManagedOnly
+            ? "e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
+            : "(na.is_active = 1 OR nb.is_active = 1)";
+        var staleEdgeFilter = queryParams.MinLastSeenHours.HasValue ? "AND e.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
+        var sql = $"""
+            WITH base AS (
+                SELECT
+                    e.id,
+                    a_fqdn = COALESCE(na.fqdn, e.endpoint_a_fqdn),
+                    b_fqdn = COALESCE(nb.fqdn, e.endpoint_b_fqdn),
+                    e.endpoint_a_ipv4,
+                    e.endpoint_b_ipv4,
+                    e.seen_count,
+                    e.first_seen
+                FROM {_edgeStatsView} e
+                LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
+                LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
+                WHERE e.seen_count > @SeenCountThreshold
+                  AND {activeFilter}
+                  {staleEdgeFilter}
+            )
+            SELECT
+                id                      = MAX(b.id),
+                endpoint_a_fqdn         = b.a_fqdn,
+                endpoint_b_fqdn         = b.b_fqdn,
+                endpoint_a_ipv4         = MIN(b.endpoint_a_ipv4),
+                endpoint_b_ipv4         = MIN(b.endpoint_b_ipv4),
+                endpoint_a_port         = CAST(NULL AS int),
+                endpoint_b_port         = CAST(NULL AS int),
+                endpoint_a_process_id   = CAST(NULL AS int),
+                endpoint_b_process_id   = CAST(NULL AS int),
+                endpoint_a_process_name = CAST(NULL AS nvarchar(260)),
+                endpoint_b_process_name = CAST(NULL AS nvarchar(260)),
+                service_port            = CAST(NULL AS int),
+                service_name            = CAST(NULL AS nvarchar(100)),
+                seen_count              = SUM(b.seen_count),
+                first_seen              = MIN(b.first_seen),
+                last_seen               = MIN(b.first_seen),
+                edge_key                = CONVERT(nvarchar(64), HASHBYTES('SHA2_256',
+                                              LOWER(b.a_fqdn) + '|' + LOWER(b.b_fqdn)
+                                          ), 2)
+            FROM base b
+            GROUP BY b.a_fqdn, b.b_fqdn
+            HAVING
+                MIN(b.first_seen) > @LastSeen
+                OR (MIN(b.first_seen) = @LastSeen AND MAX(b.id) > @LastId)
+            ORDER BY MIN(b.first_seen), MAX(b.id);
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTime2)
+        {
+            Value = cursor.LastSeen
+        });
+        command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
+        command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
+        if (queryParams.MinLastSeenHours.HasValue)
+            command.Parameters.AddWithValue("@MinLastSeenHours", queryParams.MinLastSeenHours.Value);
+        await using var reader = await command.ExecuteReaderAsync();
+
+        return await ParseEdgesFromReader(reader);
+    }
+
+    public async Task<IEnumerable<EdgeEntity>> getCustomerDistinctEdgesAsync(GraphCursor cursor, int customerId, GraphQueryParams queryParams)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        var activeFilter = queryParams.ManagedOnly
+            ? "e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
+            : "(na.is_active = 1 OR nb.is_active = 1)";
+        var staleEdgeFilter = queryParams.MinLastSeenHours.HasValue ? "AND e.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
+        var sql = $"""
+            WITH base AS (
+                SELECT
+                    e.id,
+                    a_fqdn = COALESCE(na.fqdn, e.endpoint_a_fqdn),
+                    b_fqdn = COALESCE(nb.fqdn, e.endpoint_b_fqdn),
+                    e.endpoint_a_ipv4,
+                    e.endpoint_b_ipv4,
+                    e.seen_count,
+                    e.first_seen
+                FROM {_edgeStatsView} e
+                LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
+                LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
+                WHERE e.seen_count > @SeenCountThreshold
+                  AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)
+                  AND {activeFilter}
+                  {staleEdgeFilter}
+            )
+            SELECT
+                id                      = MAX(b.id),
+                endpoint_a_fqdn         = b.a_fqdn,
+                endpoint_b_fqdn         = b.b_fqdn,
+                endpoint_a_ipv4         = MIN(b.endpoint_a_ipv4),
+                endpoint_b_ipv4         = MIN(b.endpoint_b_ipv4),
+                endpoint_a_port         = CAST(NULL AS int),
+                endpoint_b_port         = CAST(NULL AS int),
+                endpoint_a_process_id   = CAST(NULL AS int),
+                endpoint_b_process_id   = CAST(NULL AS int),
+                endpoint_a_process_name = CAST(NULL AS nvarchar(260)),
+                endpoint_b_process_name = CAST(NULL AS nvarchar(260)),
+                service_port            = CAST(NULL AS int),
+                service_name            = CAST(NULL AS nvarchar(100)),
+                seen_count              = SUM(b.seen_count),
+                first_seen              = MIN(b.first_seen),
+                last_seen               = MIN(b.first_seen),
+                edge_key                = CONVERT(nvarchar(64), HASHBYTES('SHA2_256',
+                                              LOWER(b.a_fqdn) + '|' + LOWER(b.b_fqdn)
+                                          ), 2)
+            FROM base b
+            GROUP BY b.a_fqdn, b.b_fqdn
+            HAVING
+                MIN(b.first_seen) > @LastSeen
+                OR (MIN(b.first_seen) = @LastSeen AND MAX(b.id) > @LastId)
+            ORDER BY MIN(b.first_seen), MAX(b.id);
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add(new SqlParameter("@LastSeen", System.Data.SqlDbType.DateTime2)
+        {
+            Value = cursor.LastSeen
+        });
+        command.Parameters.AddWithValue("@LastId", cursor.LastSeenEdgeId);
+        command.Parameters.AddWithValue("@SeenCountThreshold", SeenCountThreshold);
+        command.Parameters.AddWithValue("@CustomerId", customerId);
+        if (queryParams.MinLastSeenHours.HasValue)
+            command.Parameters.AddWithValue("@MinLastSeenHours", queryParams.MinLastSeenHours.Value);
+        await using var reader = await command.ExecuteReaderAsync();
+
+        return await ParseEdgesFromReader(reader);
+    }
+
     private async Task<IEnumerable<EdgeEntity>> ParseEdgesFromReader(SqlDataReader reader)
     {
         var edges = new List<EdgeEntity>();
@@ -424,10 +563,12 @@ public class Db
                 edge_count = COALESCE(ea.edge_count, 0),
                 connection_count = COALESCE(ea.connection_count, 0)
             FROM {_nodesTable} n
-            JOIN customer_edge_ciids cec ON cec.ciid = n.ciid
+            LEFT JOIN customer_edge_ciids cec ON cec.ciid = n.ciid
             LEFT JOIN edge_agg ea ON ea.node_ciid = n.ciid
             WHERE
-                (
+                -- include nodes connected to this customer plus isolated nodes owned by this customer
+                (cec.ciid IS NOT NULL OR n.group_id = @CustomerId)
+                AND (
                     n.last_seen > @LastSeen
                     OR (
                         n.last_seen = @LastSeen

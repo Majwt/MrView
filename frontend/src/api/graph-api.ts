@@ -5,6 +5,7 @@ export type GraphQueryParams = {
   excludeIsolated?: boolean;
   minLastSeenHours?: number | null;
   managedOnly?: boolean;
+  distinctEdgesOnly?: boolean;
 };
 
 export type NodeFilterParams = {
@@ -21,6 +22,7 @@ function applyGraphQueryParams(params: URLSearchParams, queryParams?: GraphQuery
   if (queryParams?.excludeIsolated) params.set("excludeIsolated", "true");
   if (queryParams?.minLastSeenHours != null) params.set("minLastSeenHours", String(queryParams.minLastSeenHours));
   if (queryParams?.managedOnly) params.set("managedOnly", "true");
+  if (queryParams?.distinctEdgesOnly) params.set("distinctEdgesOnly", "true");
 }
 
 export function fetchGraphSnapshot(customerId: number | null, queryParams?: GraphQueryParams): Promise<GraphDelta> {

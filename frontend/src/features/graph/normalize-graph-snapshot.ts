@@ -191,8 +191,8 @@ function toPlaceholderNode(placeholder: PlaceholderNodeDraft): GraphNode {
     first_seen: placeholder.firstSeen,
     last_seen: placeholder.lastSeen,
     is_placeholder: true,
-    x: Math.random() * 1000,
-    y: Math.random() * 1000,
+    x: 0,
+    y: 0,
     fx: null,
     fy: null,
   };

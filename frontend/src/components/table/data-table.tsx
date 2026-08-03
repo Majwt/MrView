@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  loading?: boolean;
   globalFilter?: string;
   onGlobalFilterChange?: (value: string) => void;
   toolbar?: React.ReactNode;
@@ -43,6 +44,7 @@ type DataTableProps<TData, TValue> = {
 export function DataTable<TData, TValue>({
   columns,
   data,
+  loading,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
   toolbar,
@@ -136,7 +138,20 @@ export function DataTable<TData, TValue>({
           </TableHeader>
 
           <TableBody>
-            {table.getRowModel().rows.length ? (
+            {loading && !table.getRowModel().rows.length ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  {table.getVisibleLeafColumns().map((col) => (
+                    <TableCell key={col.id}>
+                      <div
+                        className="h-3.5 animate-pulse rounded bg-muted"
+                        style={{ width: `${55 + ((i * 7 + col.id.length * 3) % 40)}%` }}
+                      />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => {
                 const rowHoverId = getRowHoverId?.(row.original) ?? null;
                 const isHovered =

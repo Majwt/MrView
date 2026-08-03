@@ -223,7 +223,7 @@ app.MapPost("/api/auth/oidc-exchange", async (OidcExchangeRequest req, IConfigur
 
 app.MapGet(
     "/api/graph",
-    async (ClaimsPrincipal user, string? lastSeen, long? lastEdgeId, long? lastNodeId, bool? excludeIsolated, int? minLastSeenHours, bool? managedOnly, GraphService graphService) =>
+    async (ClaimsPrincipal user, string? lastSeen, long? lastEdgeId, long? lastNodeId, bool? excludeIsolated, int? minLastSeenHours, bool? managedOnly, bool? distinctEdgesOnly, GraphService graphService) =>
     {
         var correct = DateTime.TryParse(
             lastSeen,
@@ -241,7 +241,7 @@ app.MapGet(
         }
 
         var cursor = new GraphCursor(parsedLastSeen, lastEdgeId ?? 0, lastNodeId ?? 0);
-        var queryParams = new GraphQueryParams(ExcludeIsolated: excludeIsolated ?? false, MinLastSeenHours: minLastSeenHours, ManagedOnly: managedOnly ?? false);
+        var queryParams = new GraphQueryParams(ExcludeIsolated: excludeIsolated ?? false, MinLastSeenHours: minLastSeenHours, ManagedOnly: managedOnly ?? false, DistinctEdgesOnly: distinctEdgesOnly ?? false);
 
         if (user.IsInRole("Admin"))
             return Results.Ok(await graphService.GetGraphAsync(cursor, queryParams: queryParams));
@@ -254,7 +254,7 @@ app.MapGet(
     }
 ).RequireAuthorization();
 
-app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? lastSeen, long? lastEdgeId, long? lastNodeId, bool? excludeIsolated, int? minLastSeenHours, bool? managedOnly, GraphService graphService) =>
+app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? lastSeen, long? lastEdgeId, long? lastNodeId, bool? excludeIsolated, int? minLastSeenHours, bool? managedOnly, bool? distinctEdgesOnly, GraphService graphService) =>
 {
     var correct = DateTime.TryParse(
         lastSeen,
@@ -272,7 +272,7 @@ app.MapGet("/api/customer/{customerId}/graph", async (int customerId, string? la
     }
 
     var cursor = new GraphCursor(parsedLastSeen, lastEdgeId ?? 0, lastNodeId ?? 0);
-    var queryParams = new GraphQueryParams(ExcludeIsolated: excludeIsolated ?? false, MinLastSeenHours: minLastSeenHours, ManagedOnly: managedOnly ?? false);
+    var queryParams = new GraphQueryParams(ExcludeIsolated: excludeIsolated ?? false, MinLastSeenHours: minLastSeenHours, ManagedOnly: managedOnly ?? false, DistinctEdgesOnly: distinctEdgesOnly ?? false);
     app.Logger.LogInformation(
         "Received request for customer {0} with cursor: lastSeen={1}, lastEdgeId={2}, lastNodeId={3}",
         customerId,
