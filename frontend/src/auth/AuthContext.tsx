@@ -20,6 +20,12 @@ const STORAGE_KEY = "axilanswer_token";
 
 let _tokenRef: string | null = null;
 
+export function setTokenRef(token: string | null): void {
+  _tokenRef = token;
+  if (token) localStorage.setItem(STORAGE_KEY, token);
+  else localStorage.removeItem(STORAGE_KEY);
+}
+
 // Falls back to oidc-client-ts sessionStorage so timing of React renders doesn't matter
 export function getStoredToken(): string | null {
   if (_tokenRef) return _tokenRef;
@@ -97,9 +103,15 @@ function LocalAuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    const currentToken = _tokenRef;
     localStorage.removeItem(STORAGE_KEY);
     _tokenRef = null;
     setState({ token: null, role: null, customerId: null, name: null, email: null, picture: null });
+    if (currentToken) void fetch(`${apiUrl() ?? "/api"}/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${currentToken}` },
+      credentials: "include",
+    });
   }, []);
 
   return (
@@ -118,7 +130,7 @@ function OidcAuthBridge({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!oidc.user || localState.token) return;
     setExchanging(true);
-    fetch(`${apiUrl ?? "/api"}/auth/oidc-exchange`, {
+    fetch(`${apiUrl() ?? "/api"}/auth/oidc-exchange`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: oidc.user.access_token }),
@@ -150,10 +162,16 @@ function OidcAuthBridge({ children }: { children: React.ReactNode }) {
   }, [oidc]);
 
   const logout = useCallback(() => {
+    const currentToken = _tokenRef;
     localStorage.removeItem(STORAGE_KEY);
     _tokenRef = null;
     setLocalState({ token: null, role: null, customerId: null, name: null, email: null, picture: null });
     void oidc.removeUser();
+    if (currentToken) void fetch(`${apiUrl() ?? "/api"}/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${currentToken}` },
+      credentials: "include",
+    });
   }, [oidc]);
 
   return (
@@ -164,9 +182,9 @@ function OidcAuthBridge({ children }: { children: React.ReactNode }) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  if (oidcEnabled) {
+  if (oidcEnabled()) {
     return (
-      <OidcProvider {...oidcSettings}>
+      <OidcProvider {...oidcSettings()}>
         <OidcAuthBridge>{children}</OidcAuthBridge>
       </OidcProvider>
     );

@@ -1323,4 +1323,133 @@ public class Db
 
         return rows;
     }
+
+    // ── Auth session / refresh-token lifecycle ────────────────────────────────
+
+    public async Task<Guid> CreateSessionAsync(string subject, string role, int? customerId)
+    {
+        var id = Guid.NewGuid();
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var cmd = new SqlCommand(
+            "INSERT INTO dbo.auth_session (session_id, subject, role_name, customer_id) VALUES (@id, @sub, @role, @cid)",
+            connection);
+        cmd.Parameters.AddWithValue("@id", id);
+        cmd.Parameters.AddWithValue("@sub", subject);
+        cmd.Parameters.AddWithValue("@role", role);
+        cmd.Parameters.Add(new SqlParameter("@cid", System.Data.SqlDbType.Int) { Value = (object?)customerId ?? DBNull.Value });
+        await cmd.ExecuteNonQueryAsync();
+        return id;
+    }
+
+    public async Task CreateRefreshTokenAsync(Guid sessionId, Guid familyId, byte[] tokenHash, DateTime expiresAt)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var cmd = new SqlCommand(
+            "INSERT INTO dbo.auth_refresh_token (token_id, session_id, family_id, token_hash, expires_at) VALUES (NEWID(), @sid, @fid, @hash, @exp)",
+            connection);
+        cmd.Parameters.AddWithValue("@sid", sessionId);
+        cmd.Parameters.AddWithValue("@fid", familyId);
+        cmd.Parameters.Add(new SqlParameter("@hash", System.Data.SqlDbType.VarBinary, 32) { Value = tokenHash });
+        cmd.Parameters.AddWithValue("@exp", expiresAt);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public record AuthSessionInfo(Guid SessionId, string Subject, string Role, int? CustomerId, Guid FamilyId);
+
+    /// <summary>
+    /// Atomically marks the token consumed and returns session info.
+    /// Returns (info, compromised=true) if token was already consumed — caller must treat as compromise and clear cookie.
+    /// Returns null if token not found, expired, or session revoked.
+    /// </summary>
+    public async Task<(AuthSessionInfo Session, bool Compromised)?> RedeemRefreshTokenAsync(byte[] tokenHash)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+
+        await using var cmd = new SqlCommand("""
+            SELECT rt.token_id, rt.session_id, rt.family_id,
+                   rt.consumed_at, rt.revoked_at, rt.expires_at,
+                   s.subject, s.role_name, s.customer_id, s.revoked_at
+            FROM dbo.auth_refresh_token rt
+            JOIN dbo.auth_session s ON s.session_id = rt.session_id
+            WHERE rt.token_hash = @hash
+            """, connection);
+        cmd.Parameters.Add(new SqlParameter("@hash", System.Data.SqlDbType.VarBinary, 32) { Value = tokenHash });
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+
+        var tokenId        = reader.GetGuid(0);
+        var sessionId      = reader.GetGuid(1);
+        var familyId       = reader.GetGuid(2);
+        var consumedAt     = reader.IsDBNull(3) ? (DateTime?)null : reader.GetDateTime(3);
+        var revokedAt      = reader.IsDBNull(4) ? (DateTime?)null : reader.GetDateTime(4);
+        var expiresAt      = reader.GetDateTime(5);
+        var subject        = reader.GetString(6);
+        var role           = reader.GetString(7);
+        var customerId     = reader.IsDBNull(8) ? (int?)null : reader.GetInt32(8);
+        var sessionRevoked = reader.IsDBNull(9) ? (DateTime?)null : reader.GetDateTime(9);
+        await reader.DisposeAsync();
+
+        if (sessionRevoked.HasValue) return null;
+
+        var info = new AuthSessionInfo(sessionId, subject, role, customerId, familyId);
+
+        if (consumedAt.HasValue || revokedAt.HasValue)
+        {
+            // Reuse of a consumed/revoked token — revoke entire family as compromise signal
+            await RevokeFamilyInternalAsync(familyId, "reuse-detected", connection);
+            return (info, true);
+        }
+
+        if (expiresAt < DateTime.UtcNow) return null;
+
+        await using var consume = new SqlCommand(
+            "UPDATE dbo.auth_refresh_token SET consumed_at = SYSUTCDATETIME() WHERE token_id = @id",
+            connection);
+        consume.Parameters.AddWithValue("@id", tokenId);
+        await consume.ExecuteNonQueryAsync();
+
+        return (info, false);
+    }
+
+    private static async Task RevokeFamilyInternalAsync(Guid familyId, string reason, SqlConnection connection)
+    {
+        await using var revokeTokens = new SqlCommand(
+            "UPDATE dbo.auth_refresh_token SET revoked_at = SYSUTCDATETIME(), revoked_reason = @r WHERE family_id = @fid AND revoked_at IS NULL",
+            connection);
+        revokeTokens.Parameters.AddWithValue("@fid", familyId);
+        revokeTokens.Parameters.AddWithValue("@r", reason);
+        await revokeTokens.ExecuteNonQueryAsync();
+
+        await using var revokeSession = new SqlCommand("""
+            UPDATE s SET s.revoked_at = SYSUTCDATETIME(), s.revoked_reason = @r
+            FROM dbo.auth_session s
+            JOIN dbo.auth_refresh_token rt ON rt.session_id = s.session_id
+            WHERE rt.family_id = @fid AND s.revoked_at IS NULL
+            """, connection);
+        revokeSession.Parameters.AddWithValue("@fid", familyId);
+        revokeSession.Parameters.AddWithValue("@r", reason);
+        await revokeSession.ExecuteNonQueryAsync();
+    }
+
+    public async Task RevokeSessionAsync(Guid sessionId, string reason)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var s = new SqlCommand(
+            "UPDATE dbo.auth_session SET revoked_at = SYSUTCDATETIME(), revoked_reason = @r WHERE session_id = @id AND revoked_at IS NULL",
+            connection);
+        s.Parameters.AddWithValue("@id", sessionId);
+        s.Parameters.AddWithValue("@r", reason);
+        await s.ExecuteNonQueryAsync();
+
+        await using var t = new SqlCommand(
+            "UPDATE dbo.auth_refresh_token SET revoked_at = SYSUTCDATETIME(), revoked_reason = @r WHERE session_id = @id AND revoked_at IS NULL AND consumed_at IS NULL",
+            connection);
+        t.Parameters.AddWithValue("@id", sessionId);
+        t.Parameters.AddWithValue("@r", reason);
+        await t.ExecuteNonQueryAsync();
+    }
 }

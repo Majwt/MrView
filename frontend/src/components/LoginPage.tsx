@@ -46,9 +46,9 @@ export default function LoginPage() {
           <span className="text-xl font-semibold">AxiLANswer</span>
         </div>
         <h1 className="text-lg font-medium">Sign in</h1>
-        {oidcEnabled && (
+        {oidcEnabled() && (
           <Button type="button" variant="outline" onClick={() => login()}>
-            Sign in with {oidcSettings.authority ? new URL(oidcSettings.authority).hostname : "SSO"}
+            Sign in with {oidcSettings().authority ? new URL(oidcSettings().authority).hostname : "SSO"}
           </Button>
         )}
         <form onSubmit={handleLocalSubmit} className="flex flex-col gap-4">

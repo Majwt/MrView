@@ -1,5 +1,6 @@
 using Api.Database;
 using Api.Models;
+using Api.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Protocols;
@@ -43,6 +44,7 @@ builder
 builder.Services.AddScoped<GraphService>();
 builder.Services.AddScoped<CustomerService>();
 builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<TokenService>();
 builder.Services.AddSingleton<Db>();
 
 builder.Services.AddResponseCompression(options => { options.EnableForHttps = true; });
@@ -99,10 +101,31 @@ app.Logger.LogInformation("Starting API v{0}", typeof(Program).Assembly.GetName(
 app.MapHealthChecks("/api/healthz");
 app.MapHealthChecks("/");
 
-app.MapPost("/api/auth/login", (LoginRequest req, IConfiguration config) =>
+app.MapGet("/api/auth/config", (IConfiguration config) =>
 {
-    var signingKey = config["Jwt:SigningKey"];
-    if (string.IsNullOrEmpty(signingKey))
+    var authority = config["Oidc:Authority"];
+    return Results.Ok(new
+    {
+        oidc_enabled = !string.IsNullOrEmpty(authority),
+        oidc_authority = authority ?? "",
+        oidc_client_id = config["Oidc:ClientId"] ?? "",
+        oidc_scope = "openid profile",
+    });
+});
+
+static void SetRefreshCookie(HttpContext ctx, string raw, int days) =>
+    ctx.Response.Cookies.Append("axilanswer_rt", raw, new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = true,
+        SameSite = SameSiteMode.Strict,
+        Expires = DateTimeOffset.UtcNow.AddDays(days),
+        Path = "/api/auth",
+    });
+
+app.MapPost("/api/auth/login", async (LoginRequest req, IConfiguration config, Db db, TokenService ts, HttpContext ctx) =>
+{
+    if (string.IsNullOrEmpty(config["Jwt:SigningKey"]))
         return Results.Problem("Login endpoint not available: Jwt:SigningKey is not configured.");
 
     var users = config.GetSection("Auth:Users").Get<List<AuthUser>>() ?? [];
@@ -112,27 +135,14 @@ app.MapPost("/api/auth/login", (LoginRequest req, IConfiguration config) =>
     if (match is null)
         return Results.Unauthorized();
 
-    var claims = new List<Claim>
-    {
-        new("name", match.Username),
-        new("role", match.Role),
-    };
-    if (match.CustomerId.HasValue)
-        claims.Add(new Claim("customer_id", match.CustomerId.Value.ToString()));
-
-    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey));
-    var token = new JwtSecurityToken(
-        issuer: config["Jwt:Issuer"],
-        audience: config["Jwt:Audience"],
-        claims: claims,
-        expires: DateTime.UtcNow.AddHours(8),
-        signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
-    );
-
-    return Results.Ok(new { token = new JwtSecurityTokenHandler().WriteToken(token) });
+    var sessionId = await db.CreateSessionAsync(match.Username, match.Role, match.CustomerId);
+    var (raw, hash) = ts.GenerateRefreshToken();
+    await db.CreateRefreshTokenAsync(sessionId, Guid.NewGuid(), hash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
+    SetRefreshCookie(ctx, raw, ts.RefreshTokenDays);
+    return Results.Ok(new { token = ts.MintAccessToken(sessionId.ToString(), match.Username, match.Role, match.CustomerId) });
 });
 
-app.MapPost("/api/auth/oidc-exchange", async (OidcExchangeRequest req, IConfiguration config, IServiceProvider sp) =>
+app.MapPost("/api/auth/oidc-exchange", async (OidcExchangeRequest req, IConfiguration config, IServiceProvider sp, Db db, TokenService ts, HttpContext ctx) =>
 {
     var key = config["Jwt:SigningKey"];
     if (string.IsNullOrEmpty(key))
@@ -202,16 +212,43 @@ app.MapPost("/api/auth/oidc-exchange", async (OidcExchangeRequest req, IConfigur
     var issuedClaims = new List<Claim> { new("name", name ?? ""), new("role", appRole) };
     if (cid != null) issuedClaims.Add(new Claim("customer_id", cid));
 
-    var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
-    var issued = new JwtSecurityToken(
-        issuer: config["Jwt:Issuer"],
-        audience: config["Jwt:Audience"],
-        claims: issuedClaims,
-        expires: DateTime.UtcNow.AddHours(8),
-        signingCredentials: new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256)
-    );
-    return Results.Ok(new { token = new JwtSecurityTokenHandler().WriteToken(issued) });
+    var customerIdInt = cid != null && int.TryParse(cid, out var cidParsed) ? cidParsed : (int?)null;
+    var sessionId = await db.CreateSessionAsync(name ?? "", appRole, customerIdInt);
+    var (raw, hash) = ts.GenerateRefreshToken();
+    await db.CreateRefreshTokenAsync(sessionId, Guid.NewGuid(), hash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
+    SetRefreshCookie(ctx, raw, ts.RefreshTokenDays);
+    return Results.Ok(new { token = ts.MintAccessToken(sessionId.ToString(), name ?? "", appRole, customerIdInt) });
 });
+
+app.MapPost("/api/auth/refresh", async (HttpContext ctx, Db db, TokenService ts) =>
+{
+    var raw = ctx.Request.Cookies["axilanswer_rt"];
+    if (string.IsNullOrEmpty(raw)) return Results.Unauthorized();
+
+    var result = await db.RedeemRefreshTokenAsync(ts.HashToken(raw));
+    if (result is null) return Results.Unauthorized();
+
+    var (session, compromised) = result.Value;
+    if (compromised)
+    {
+        ctx.Response.Cookies.Delete("axilanswer_rt", new CookieOptions { Path = "/api/auth" });
+        return Results.Unauthorized();
+    }
+
+    var (newRaw, newHash) = ts.GenerateRefreshToken();
+    await db.CreateRefreshTokenAsync(session.SessionId, session.FamilyId, newHash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
+    SetRefreshCookie(ctx, newRaw, ts.RefreshTokenDays);
+    return Results.Ok(new { token = ts.MintAccessToken(session.SessionId.ToString(), session.Subject, session.Role, session.CustomerId) });
+});
+
+app.MapPost("/api/auth/logout", async (ClaimsPrincipal user, HttpContext ctx, Db db) =>
+{
+    var sid = user.FindFirstValue("sid");
+    if (sid != null && Guid.TryParse(sid, out var sessionId))
+        await db.RevokeSessionAsync(sessionId, "logout");
+    ctx.Response.Cookies.Delete("axilanswer_rt", new CookieOptions { Path = "/api/auth" });
+    return Results.Ok();
+}).RequireAuthorization();
 
 // Layout:
 
