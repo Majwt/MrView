@@ -2,7 +2,7 @@ import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import { env } from "process";
 
 function git(command: string, fallback = "unknown"): string {
@@ -53,6 +53,14 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+    },
+  },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
     },
   },
 });

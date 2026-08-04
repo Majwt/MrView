@@ -16,7 +16,7 @@ export function applyGraphDelta(current: GraphSnapshot, delta: GraphDelta): Grap
   for (const node of delta.upsert_nodes) {
     // Merge with existing node to preserve lazily-loaded details (interfaces, customer, etc.)
     const existing = nodesByFqdn.get(node.fqdn);
-    nodesByFqdn.set(node.fqdn, existing ? { ...existing, ...node } : node);
+    nodesByFqdn.set(node.fqdn, existing ? mergeNode(existing, node) : node);
   }
 
   for (const edgeId of removeEdgeIds) {
@@ -32,4 +32,23 @@ export function applyGraphDelta(current: GraphSnapshot, delta: GraphDelta): Grap
     edges: [...edgesById.values()],
     cursor: delta.cursor,
   });
+}
+
+function mergeNode(existing: GraphSnapshot["nodes"][number], incoming: GraphSnapshot["nodes"][number]) {
+  const merged = { ...existing, ...incoming };
+
+  if (incoming.interfaces === undefined) {
+    merged.interfaces = existing.interfaces;
+  }
+  if (incoming.customer === undefined) {
+    merged.customer = existing.customer;
+  }
+  if (incoming.first_seen === undefined) {
+    merged.first_seen = existing.first_seen;
+  }
+  if (incoming.last_seen === undefined) {
+    merged.last_seen = existing.last_seen;
+  }
+
+  return merged;
 }
