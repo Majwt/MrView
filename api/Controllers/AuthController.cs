@@ -252,10 +252,9 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     [Authorize]
     public async Task<IResult> Logout(
-        ClaimsPrincipal user,
         [FromServices] IAuthSessionRepository authSessionRepository)
     {
-        var sessionIdClaim = user.FindFirstValue("sid");
+        var sessionIdClaim = User.FindFirstValue("sid");
         if (sessionIdClaim != null && Guid.TryParse(sessionIdClaim, out var sessionId))
         {
             await authSessionRepository.RevokeSessionAsync(sessionId, "logout");

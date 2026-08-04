@@ -4,7 +4,6 @@ using Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Globalization;
-using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -14,7 +13,6 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
     [HttpGet("api/graph")]
     [Authorize]
     public async Task<IResult> GetGraph(
-        ClaimsPrincipal user,
         [FromQuery] string? lastSeen,
         [FromQuery] long? lastEdgeId,
         [FromQuery] long? lastNodeId,
@@ -43,12 +41,12 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
             ManagedOnly: managedOnly ?? false,
             DistinctEdgesOnly: distinctEdgesOnly ?? false);
 
-        if (user.IsInRole("Admin"))
+        if (User.IsInRole("Admin"))
         {
             return Results.Ok(await graphService.GetGraphAsync(cursor, queryParams: queryParams));
         }
 
-        var customerIdClaim = Jwt.CustomerIdClaim(user);
+        var customerIdClaim = Jwt.CustomerIdClaim(User);
         if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
         {
             return Results.Forbid();
@@ -102,7 +100,6 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
     [HttpGet("api/node")]
     [Authorize]
     public async Task<IResult> GetNode(
-        ClaimsPrincipal user,
         [FromQuery] string ciid,
         [FromServices] GraphService graphService)
     {
@@ -117,9 +114,9 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
             return Results.NotFound();
         }
 
-        if (!user.IsInRole("Admin"))
+        if (!User.IsInRole("Admin"))
         {
-            var customerIdClaim = Jwt.CustomerIdClaim(user);
+            var customerIdClaim = Jwt.CustomerIdClaim(User);
             if (customerIdClaim == null
                 || !long.TryParse(customerIdClaim, out var customerId)
                 || details.Customer.Id != customerId)
@@ -134,7 +131,6 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
     [HttpGet("api/nodes/filter")]
     [Authorize]
     public async Task<IResult> FilterNodes(
-        ClaimsPrincipal user,
         [FromQuery] string? customer,
         [FromQuery] string? ip,
         [FromQuery] string? mac,
@@ -157,9 +153,9 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
         }
 
         int? scopedCustomerId = null;
-        if (!user.IsInRole("Admin"))
+        if (!User.IsInRole("Admin"))
         {
-            var customerIdClaim = Jwt.CustomerIdClaim(user);
+            var customerIdClaim = Jwt.CustomerIdClaim(User);
             if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
             {
                 return Results.Forbid();
