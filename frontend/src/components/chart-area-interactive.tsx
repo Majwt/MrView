@@ -126,24 +126,24 @@ export function ChartAreaInteractive({ data, loading }: { data: ChartPoint[]; lo
               <linearGradient id="fillTotal" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="5%"
-                  stopColor="var(--color-total)"
+                  stopColor="var(--chart-1)"
                   stopOpacity={0.8}
                 />
                 <stop
                   offset="95%"
-                  stopColor="var(--color-total)"
+                  stopColor="var(--chart-1)"
                   stopOpacity={0.1}
                 />
               </linearGradient>
               <linearGradient id="fillDistinct" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="5%"
-                  stopColor="var(--color-distinct)"
+                  stopColor="var(--chart-2)"
                   stopOpacity={0.8}
                 />
                 <stop
                   offset="95%"
-                  stopColor="var(--color-distinct)"
+                  stopColor="var(--chart-2)"
                   stopOpacity={0.1}
                 />
               </linearGradient>
@@ -185,14 +185,14 @@ export function ChartAreaInteractive({ data, loading }: { data: ChartPoint[]; lo
               dataKey="distinct"
               type="natural"
               fill="url(#fillDistinct)"
-              stroke="var(--color-distinct)"
+              stroke="var(--chart-2)"
             />
             <Area
               yAxisId="total"
               dataKey="total"
               type="natural"
               fill="url(#fillTotal)"
-              stroke="var(--color-total)"
+              stroke="var(--chart-1)"
             />
           </AreaChart>
         </ChartContainer>
