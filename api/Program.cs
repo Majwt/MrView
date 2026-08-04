@@ -1,8 +1,9 @@
+using Api.Auth;
 using Api.Database;
+using Api.Extensions;
 using Api.Models;
 using Api.Services;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
+using Api.Serialization;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -10,85 +11,20 @@ using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Security.Claims;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.PropertyNamingPolicy = System
-        .Text
-        .Json
-        .JsonNamingPolicy
-        .SnakeCaseLower;
-    options.SerializerOptions.Converters.Add(new UtcDateTimeConverter());
-});
 builder.Configuration.AddEnvironmentVariables();
 
-builder
-    .Services.AddOptions<DatabaseOptions>()
-    .Bind(builder.Configuration.GetSection("Database"))
-    .Validate(
-        o =>
-            o.IsValid()
-            && builder.Configuration.GetConnectionString(Config.CONNECTION_STRING_NAME) != null,
-        "Invalid database configuration. \nOne of the following conditions is not met: \n"
-            + "1. EdgeTable, NodeTable, InterfaceTable, and PortsTable must be in the format [schema].[table] or schema.table, where schema and table consist of letters, numbers, or underscores. \n"
-            + "2. SeenCountThreshold must be a non-negative integer. \n"
-            + "3. A valid connection string named 'Default' must be provided in the configuration.\n"
-    )
-    .ValidateOnStart();
-
-builder.Services.AddScoped<GraphService>();
-builder.Services.AddScoped<CustomerService>();
-builder.Services.AddScoped<DashboardService>();
-builder.Services.AddScoped<TokenService>();
-builder.Services.AddSingleton<Db>();
-
-builder.Services.AddResponseCompression(options => { options.EnableForHttps = true; });
+builder.Services
+    .AddApiJson()
+    .AddDatabaseOptions(builder.Configuration)
+    .AddApiCore()
+    .AddApiAuthentication(builder.Configuration);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-
-builder.Services.AddHealthChecks();
-builder.Services.AddHttpClient();
-
-builder.Services.AddEndpointsApiExplorer();
-
-var authority = builder.Configuration["Oidc:Authority"];
-var signingKey = builder.Configuration["Jwt:SigningKey"];
-
-var authBuilder = builder.Services.AddAuthentication();
-if (!string.IsNullOrEmpty(signingKey))
-{
-    authBuilder.AddJwtBearer("Local", options =>
-    {
-        options.TokenValidationParameters.IssuerSigningKey =
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey));
-        options.TokenValidationParameters.ValidIssuer = builder.Configuration["Jwt:Issuer"];
-        options.TokenValidationParameters.ValidAudience = builder.Configuration["Jwt:Audience"];
-        options.MapInboundClaims = true;
-    });
-}
-
-// ponytail: cached OIDC discovery — only used by the exchange endpoint, not for direct token validation
-if (!string.IsNullOrEmpty(authority))
-{
-    builder.Services.AddSingleton<IConfigurationManager<OpenIdConnectConfiguration>>(_ =>
-        new ConfigurationManager<OpenIdConnectConfiguration>(
-            $"{authority}/.well-known/openid-configuration",
-            new OpenIdConnectConfigurationRetriever()));
-}
-
-builder.Services.AddScoped<IClaimsTransformation, OidcRoleNormalizer>();
-builder.Services.AddAuthorization(options =>
-{
-    var pb = new AuthorizationPolicyBuilder("Local").RequireAuthenticatedUser();
-    options.DefaultPolicy = pb.Build();
-    options.AddPolicy("AdminOnly", policy => policy.AddAuthenticationSchemes("Local").RequireRole("Admin"));
-});
 
 var app = builder.Build();
 
@@ -113,16 +49,6 @@ app.MapGet("/api/auth/config", (IConfiguration config) =>
     });
 });
 
-static void SetRefreshCookie(HttpContext ctx, string raw, int days) =>
-    ctx.Response.Cookies.Append("axilanswer_rt", raw, new CookieOptions
-    {
-        HttpOnly = true,
-        Secure = true,
-        SameSite = SameSiteMode.Strict,
-        Expires = DateTimeOffset.UtcNow.AddDays(days),
-        Path = "/api/auth",
-    });
-
 app.MapPost("/api/auth/login", async (LoginRequest req, IConfiguration config, Db db, TokenService ts, HttpContext ctx) =>
 {
     if (string.IsNullOrEmpty(config["Jwt:SigningKey"]))
@@ -138,7 +64,7 @@ app.MapPost("/api/auth/login", async (LoginRequest req, IConfiguration config, D
     var sessionId = await db.CreateSessionAsync(match.Username, match.Role, match.CustomerId);
     var (raw, hash) = ts.GenerateRefreshToken();
     await db.CreateRefreshTokenAsync(sessionId, Guid.NewGuid(), hash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
-    SetRefreshCookie(ctx, raw, ts.RefreshTokenDays);
+    RefreshTokenCookieWriter.SetRefreshCookie(ctx, raw, ts.RefreshTokenDays);
     return Results.Ok(new { token = ts.MintAccessToken(sessionId.ToString(), match.Username, match.Role, match.CustomerId) });
 });
 
@@ -216,7 +142,7 @@ app.MapPost("/api/auth/oidc-exchange", async (OidcExchangeRequest req, IConfigur
     var sessionId = await db.CreateSessionAsync(name ?? "", appRole, customerIdInt);
     var (raw, hash) = ts.GenerateRefreshToken();
     await db.CreateRefreshTokenAsync(sessionId, Guid.NewGuid(), hash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
-    SetRefreshCookie(ctx, raw, ts.RefreshTokenDays);
+    RefreshTokenCookieWriter.SetRefreshCookie(ctx, raw, ts.RefreshTokenDays);
     return Results.Ok(new { token = ts.MintAccessToken(sessionId.ToString(), name ?? "", appRole, customerIdInt) });
 });
 
@@ -237,7 +163,7 @@ app.MapPost("/api/auth/refresh", async (HttpContext ctx, Db db, TokenService ts)
 
     var (newRaw, newHash) = ts.GenerateRefreshToken();
     await db.CreateRefreshTokenAsync(session.SessionId, session.FamilyId, newHash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
-    SetRefreshCookie(ctx, newRaw, ts.RefreshTokenDays);
+    RefreshTokenCookieWriter.SetRefreshCookie(ctx, newRaw, ts.RefreshTokenDays);
     return Results.Ok(new { token = ts.MintAccessToken(session.SessionId.ToString(), session.Subject, session.Role, session.CustomerId) });
 });
 
@@ -451,47 +377,3 @@ try
     app.Run();
 }
 catch (OperationCanceledException) { }
-
-class AuthUser
-{
-    public string Username { get; set; } = "";
-    public string Password { get; set; } = "";
-    public string Role { get; set; } = "";
-    public int? CustomerId { get; set; }
-}
-
-record LoginRequest(string Username, string Password);
-record OidcExchangeRequest(string Token);
-
-// ponytail: forces "Z" suffix on all DateTime outputs regardless of Kind
-class UtcDateTimeConverter : JsonConverter<DateTime>
-{
-    public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        => DateTime.SpecifyKind(reader.GetDateTime(), DateTimeKind.Utc);
-
-    public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
-        => writer.WriteStringValue(DateTime.SpecifyKind(value, DateTimeKind.Utc));
-}
-
-// Maps Entra ID "roles" array to ClaimTypes.Role so IsInRole() works for all providers
-class OidcRoleNormalizer : IClaimsTransformation
-{
-    public Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
-    {
-        var roles = principal.FindAll("roles").ToList();
-        if (roles.Count == 0 || principal.HasClaim(c => c.Type == ClaimTypes.Role))
-            return Task.FromResult(principal);
-
-        var identity = new ClaimsIdentity();
-        foreach (var r in roles) identity.AddClaim(new Claim(ClaimTypes.Role, r.Value));
-        principal.AddIdentity(identity);
-        return Task.FromResult(principal);
-    }
-}
-
-// Resolves customer_id from both our tokens and Entra ID extension attributes
-static class Jwt
-{
-    public static string? CustomerIdClaim(ClaimsPrincipal user) =>
-        user.FindFirstValue("customer_id") ?? user.FindFirstValue("extension_customer_id");
-}
