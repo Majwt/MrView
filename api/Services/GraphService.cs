@@ -3,13 +3,13 @@ using Api.Models;
 
 public class GraphService
 {
-    private Db db;
+    private readonly IGraphReadRepository _graphRepository;
     private readonly ILogger<GraphService> _logger;
 
-    public GraphService(ILogger<GraphService> logger, Db _db)
+    public GraphService(ILogger<GraphService> logger, IGraphReadRepository graphRepository)
     {
         _logger = logger;
-        db = _db;
+        _graphRepository = graphRepository;
     }
 
     public async Task<GraphResponse> GetGraphAsync(int customerId = -1, GraphQueryParams? queryParams = null)
@@ -27,13 +27,17 @@ public class GraphService
 
         if (customerId == -1)
         {
-            dbEdgesTask = qp.DistinctEdgesOnly ? db.getDistinctEdgesAsync(cursor, qp) : db.getEdgesAsync(cursor, qp);
-            dbNodesTask = db.getNodeSummariesAsync(cursor, qp);
+            dbEdgesTask = qp.DistinctEdgesOnly
+                ? _graphRepository.getDistinctEdgesAsync(cursor, qp)
+                : _graphRepository.getEdgesAsync(cursor, qp);
+            dbNodesTask = _graphRepository.getNodeSummariesAsync(cursor, qp);
         }
         else
         {
-            dbEdgesTask = qp.DistinctEdgesOnly ? db.getCustomerDistinctEdgesAsync(cursor, customerId, qp) : db.getCustomerEdgesAsync(cursor, customerId, qp);
-            dbNodesTask = db.getCustomerNodeSummariesAsync(cursor, customerId, qp);
+            dbEdgesTask = qp.DistinctEdgesOnly
+                ? _graphRepository.getCustomerDistinctEdgesAsync(cursor, customerId, qp)
+                : _graphRepository.getCustomerEdgesAsync(cursor, customerId, qp);
+            dbNodesTask = _graphRepository.getCustomerNodeSummariesAsync(cursor, customerId, qp);
         }
 
         await Task.WhenAll(dbEdgesTask, dbNodesTask);
@@ -55,7 +59,7 @@ public class GraphService
 
     public async Task<NodeDto?> GetNodeDetailsAsync(string ciid)
     {
-        var entity = await db.getNodeByCiidAsync(ciid);
+        var entity = await _graphRepository.getNodeByCiidAsync(ciid);
         if (entity == null) return null;
         return ToNodeDto(entity);
     }
@@ -66,7 +70,15 @@ public class GraphService
         DateTime? lastSeenAfter, DateTime? lastSeenBefore,
         int? scopeCustomerId = null)
     {
-        return await db.filterNodeCiidsAsync(customer, ip, mac, firstSeenAfter, firstSeenBefore, lastSeenAfter, lastSeenBefore, scopeCustomerId);
+        return await _graphRepository.filterNodeCiidsAsync(
+            customer,
+            ip,
+            mac,
+            firstSeenAfter,
+            firstSeenBefore,
+            lastSeenAfter,
+            lastSeenBefore,
+            scopeCustomerId);
     }
 
     private static IEnumerable<NodeSummaryDto> ToNodeSummaryDtos(IEnumerable<NodeSummaryEntity> nodes)

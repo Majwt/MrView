@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace Api.Database;
 
-public class Db
+public class Db : IGraphReadRepository, IDashboardReadRepository, ICustomerReadRepository, IAuthSessionRepository
 {
     private readonly ILogger<Db> _logger;
     public string ConnectionString { get; }
@@ -1028,7 +1028,7 @@ public class Db
         return nodes;
     }
 
-    internal async Task<Customer[]> getAllCustomersAsync()
+    public async Task<Customer[]> getAllCustomersAsync()
     {
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();

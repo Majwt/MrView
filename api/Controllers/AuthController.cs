@@ -36,7 +36,7 @@ public class AuthController : ControllerBase
     public async Task<IResult> Login(
         [FromBody] LoginRequest request,
         [FromServices] IConfiguration config,
-        [FromServices] Db db,
+        [FromServices] IAuthSessionRepository authSessionRepository,
         [FromServices] TokenService tokenService)
     {
         if (string.IsNullOrEmpty(config["Jwt:SigningKey"]))
@@ -53,9 +53,9 @@ public class AuthController : ControllerBase
             return Results.Unauthorized();
         }
 
-        var sessionId = await db.CreateSessionAsync(match.Username, match.Role, match.CustomerId);
+        var sessionId = await authSessionRepository.CreateSessionAsync(match.Username, match.Role, match.CustomerId);
         var (rawToken, hash) = tokenService.GenerateRefreshToken();
-        await db.CreateRefreshTokenAsync(
+        await authSessionRepository.CreateRefreshTokenAsync(
             sessionId,
             Guid.NewGuid(),
             hash,
@@ -79,7 +79,7 @@ public class AuthController : ControllerBase
         [FromBody] OidcExchangeRequest request,
         [FromServices] IConfiguration config,
         [FromServices] IServiceProvider serviceProvider,
-        [FromServices] Db db,
+        [FromServices] IAuthSessionRepository authSessionRepository,
         [FromServices] TokenService tokenService)
     {
         var key = config["Jwt:SigningKey"];
@@ -189,9 +189,9 @@ public class AuthController : ControllerBase
             ? parsedCustomerId
             : (int?)null;
 
-        var sessionId = await db.CreateSessionAsync(name ?? "", appRole, customerId);
+        var sessionId = await authSessionRepository.CreateSessionAsync(name ?? "", appRole, customerId);
         var (rawToken, hash) = tokenService.GenerateRefreshToken();
-        await db.CreateRefreshTokenAsync(
+        await authSessionRepository.CreateRefreshTokenAsync(
             sessionId,
             Guid.NewGuid(),
             hash,
@@ -208,7 +208,7 @@ public class AuthController : ControllerBase
     [HttpPost("refresh")]
     [AllowAnonymous]
     public async Task<IResult> Refresh(
-        [FromServices] Db db,
+        [FromServices] IAuthSessionRepository authSessionRepository,
         [FromServices] TokenService tokenService)
     {
         var rawToken = HttpContext.Request.Cookies["axilanswer_rt"];
@@ -217,7 +217,7 @@ public class AuthController : ControllerBase
             return Results.Unauthorized();
         }
 
-        var result = await db.RedeemRefreshTokenAsync(tokenService.HashToken(rawToken));
+        var result = await authSessionRepository.RedeemRefreshTokenAsync(tokenService.HashToken(rawToken));
         if (result is null)
         {
             return Results.Unauthorized();
@@ -231,7 +231,7 @@ public class AuthController : ControllerBase
         }
 
         var (nextRawToken, nextHash) = tokenService.GenerateRefreshToken();
-        await db.CreateRefreshTokenAsync(
+        await authSessionRepository.CreateRefreshTokenAsync(
             session.SessionId,
             session.FamilyId,
             nextHash,
@@ -253,12 +253,12 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IResult> Logout(
         ClaimsPrincipal user,
-        [FromServices] Db db)
+        [FromServices] IAuthSessionRepository authSessionRepository)
     {
         var sessionIdClaim = user.FindFirstValue("sid");
         if (sessionIdClaim != null && Guid.TryParse(sessionIdClaim, out var sessionId))
         {
-            await db.RevokeSessionAsync(sessionId, "logout");
+            await authSessionRepository.RevokeSessionAsync(sessionId, "logout");
         }
 
         HttpContext.Response.Cookies.Delete("axilanswer_rt", new CookieOptions { Path = "/api/auth" });
