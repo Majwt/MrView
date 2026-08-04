@@ -48,7 +48,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<CustomerService>();
         services.AddScoped<DashboardService>();
         services.AddScoped<TokenService>();
-        services.AddSingleton<Db>();
         services.AddSingleton<IGraphReadRepository, GraphReadRepository>();
         services.AddSingleton<IDashboardReadRepository, DashboardReadRepository>();
         services.AddSingleton<ICustomerReadRepository, CustomerReadRepository>();
