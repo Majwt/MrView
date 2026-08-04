@@ -49,10 +49,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DashboardService>();
         services.AddScoped<TokenService>();
         services.AddSingleton<Db>();
-        services.AddSingleton<IGraphReadRepository>(serviceProvider => serviceProvider.GetRequiredService<Db>());
-        services.AddSingleton<IDashboardReadRepository>(serviceProvider => serviceProvider.GetRequiredService<Db>());
-        services.AddSingleton<ICustomerReadRepository>(serviceProvider => serviceProvider.GetRequiredService<Db>());
-        services.AddSingleton<IAuthSessionRepository>(serviceProvider => serviceProvider.GetRequiredService<Db>());
+        services.AddSingleton<IGraphReadRepository, GraphReadRepository>();
+        services.AddSingleton<IDashboardReadRepository, DashboardReadRepository>();
+        services.AddSingleton<ICustomerReadRepository, CustomerReadRepository>();
+        services.AddSingleton<IAuthSessionRepository, AuthSessionRepository>();
         services.AddControllers();
 
         services.AddResponseCompression(options => { options.EnableForHttps = true; });

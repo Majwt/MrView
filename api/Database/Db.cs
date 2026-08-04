@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace Api.Database;
 
-public class Db : IGraphReadRepository, IDashboardReadRepository, ICustomerReadRepository, IAuthSessionRepository
+public class Db
 {
     private readonly ILogger<Db> _logger;
     public string ConnectionString { get; }
