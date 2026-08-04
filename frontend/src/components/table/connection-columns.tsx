@@ -30,7 +30,10 @@ const dateSortingFn: SortingFn<TableConnection> = (rowA, rowB, columnId) => {
   return toTimestamp(rowA.getValue(columnId)) - toTimestamp(rowB.getValue(columnId));
 };
 
-export const connectionColumns: ColumnDef<TableConnection>[] = [
+export function createConnectionColumns(
+  onHostFocus?: (fqdn: string) => void,
+): ColumnDef<TableConnection>[] {
+  return [
   {
     accessorKey: "serviceName",
     header: "Service",
@@ -39,7 +42,13 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
   {
     accessorKey: "source",
     header: "Source",
-    cell: ({ row }) => <HostCell primary={row.original.source} secondary={row.original.sourceIp} />,
+    cell: ({ row }) => (
+      <HostCell
+        primary={row.original.source}
+        secondary={row.original.sourceIp}
+        onPrimaryClick={onHostFocus ? () => onHostFocus(row.original.source) : undefined}
+      />
+    ),
   },
   // {
   //   accessorKey: "sourceIp",
@@ -49,7 +58,13 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
   {
     accessorKey: "sourcePort",
     header: "Src Port",
-    cell: ({ getValue }) => <NumericCell value={Number(getValue() ?? 0)} />,
+    cell: ({ row }) => (
+      <NumericCell
+        value={row.original.sourcePort}
+        enableCopy
+        copyValue={`${row.original.sourcePort}`}
+      />
+    ),
   },
   {
     accessorKey: "sourceProcess",
@@ -68,7 +83,13 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
   {
     accessorKey: "target",
     header: "Destination",
-    cell: ({ row }) => <HostCell primary={row.original.target} secondary={row.original.targetIp} />,
+    cell: ({ row }) => (
+      <HostCell
+        primary={row.original.target}
+        secondary={row.original.targetIp}
+        onPrimaryClick={onHostFocus ? () => onHostFocus(row.original.target) : undefined}
+      />
+    ),
   },
   // {
   //   accessorKey: "targetIp",
@@ -78,7 +99,13 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
   {
     accessorKey: "targetPort",
     header: "Dst Port",
-    cell: ({ getValue }) => <NumericCell value={Number(getValue() ?? 0)} />,
+    cell: ({ row }) => (
+      <NumericCell
+        value={row.original.targetPort}
+        enableCopy
+        copyValue={`${row.original.targetPort}`}
+      />
+    ),
   },
   {
     accessorKey: "targetProcess",
@@ -97,7 +124,10 @@ export const connectionColumns: ColumnDef<TableConnection>[] = [
     sortDescFirst: true,
     cell: ({ getValue }) => <RichDateCell value={getValue()} />,
   },
-];
+  ];
+}
+
+export const connectionColumns: ColumnDef<TableConnection>[] = createConnectionColumns();
 
 function toTimestamp(value: unknown) {
   const timestamp = Date.parse(String(value ?? ""));

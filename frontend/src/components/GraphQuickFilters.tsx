@@ -19,6 +19,7 @@ const STALE_OPTIONS: { label: string; hours: number; title: string }[] = [
 
 type GraphQuickFiltersProps = {
   quickFilters: QuickFilters;
+  rightOffset?: number;
   onToggleIsolated: () => void;
   onToggleManagedOnly: () => void;
   onSetStaleThreshold: (days: number | null) => void;
@@ -29,52 +30,54 @@ const pillClass =
 
 export default function GraphQuickFilters({
   quickFilters,
+  rightOffset = 12,
   onToggleIsolated,
   onToggleManagedOnly,
   onSetStaleThreshold,
 }: GraphQuickFiltersProps) {
   return (
-    <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={onToggleIsolated}
-        data-active={quickFilters.hideIsolatedNodes}
-        className={pillClass}
-        title="Hide isolated nodes (nodes with no connections)"
-      >
-        <Unlink className="size-3.5" />
-        Hide isolated
-      </button>
-
-      <button
-        type="button"
-        onClick={onToggleManagedOnly}
-        data-active={quickFilters.managedOnly}
-        className={pillClass}
-        title="Only show connections where both endpoints are managed nodes"
-      >
-        <Network className="size-3.5" />
-        Managed only
-      </button>
-
-      <div className="h-4 w-px bg-foreground/20" />
-
-      <Clock className="size-3.5 text-muted-foreground" />
-
-      {STALE_OPTIONS.map(({ label, hours, title }) => (
+    <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 md:flex-row md:items-center" style={{ right: rightOffset }}>
+      <div className="flex items-center gap-1.5">
         <button
-          key={hours}
           type="button"
-          onClick={() =>
-            onSetStaleThreshold(quickFilters.staleThresholdHours === hours ? null : hours)
-          }
-          data-active={quickFilters.staleThresholdHours === hours}
+          onClick={onToggleIsolated}
+          data-active={quickFilters.hideIsolatedNodes}
           className={pillClass}
-          title={title}
+          title="Hide isolated nodes (nodes with no connections)"
         >
-          {label}
+          <Unlink className="size-3.5" />
+          Hide isolated
         </button>
-      ))}
+
+        <button
+          type="button"
+          onClick={onToggleManagedOnly}
+          data-active={quickFilters.managedOnly}
+          className={pillClass}
+          title="Only show connections where both endpoints are managed nodes"
+        >
+          <Network className="size-3.5" />
+          Managed only
+        </button>
+      </div>
+
+      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5 md:overflow-visible md:pb-0">
+        <Clock className="size-3.5 shrink-0 text-muted-foreground" />
+        {STALE_OPTIONS.map(({ label, hours, title }) => (
+          <button
+            key={hours}
+            type="button"
+            onClick={() =>
+              onSetStaleThreshold(quickFilters.staleThresholdHours === hours ? null : hours)
+            }
+            data-active={quickFilters.staleThresholdHours === hours}
+            className={pillClass}
+            title={title}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { GraphSnapshot } from "@/features/graph/types";
 import { RichDateCell } from "./table/styled-cells";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
+import { CopyButton } from "@/components/ui/copy-button";
 
 export default function NodeDetailsPanel({
   node,
@@ -18,11 +19,17 @@ export default function NodeDetailsPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 gap-4">
 
-      <p className="text-xs text-muted-foreground">clicking on the graph while this is open is currently broken. To be fixed</p>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-mono text-sm font-semibold">{node.fqdn}</p>
+          <div className="group/item flex min-w-0 items-center gap-1">
+            <p className="truncate font-mono text-sm font-semibold">{node.fqdn}</p>
+            <CopyButton
+              value={node.fqdn}
+              label="FQDN"
+              className="opacity-0 transition-opacity group-hover/item:opacity-100"
+            />
+          </div>
           <p className="text-xs text-muted-foreground">
             {hasCustomer ? (node.customer!.name || "Unknown customer") : node.hostname}
           </p>
@@ -43,12 +50,19 @@ export default function NodeDetailsPanel({
       ) : hasCustomer ? (
         node.customer!.cmdb_ci_id ? (
           <div className="rounded-md border-2 bg-muted/30 px-3 py-2">
-            <div className="mb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">CMDB CI ID</div>
-            <span className="font-mono text-sm font-semibold">{node.customer!.cmdb_ci_id}</span>
+            <div className="mb-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">CIID</div>
+            <div className="group/item flex items-center gap-1">
+              <span className="font-mono text-sm font-semibold">{node.customer!.cmdb_ci_id}</span>
+              <CopyButton
+                value={node.customer!.cmdb_ci_id}
+                label="CIID"
+                className="opacity-0 transition-opacity group-hover/item:opacity-100"
+              />
+            </div>
           </div>
         ) : (
           <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-            No CMDB CI ID
+            No CIID
           </div>
         )
       ) : null}
@@ -136,7 +150,14 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
   return (
     <>
       <span className="text-muted-foreground">{label}</span>
-      <span className={mono ? "font-mono" : ""}>{value}</span>
+      <div className="group/item flex min-w-0 items-center gap-1">
+        <span className={mono ? "truncate font-mono" : "truncate"}>{value}</span>
+        <CopyButton
+          value={value}
+          label={label}
+          className="opacity-0 transition-opacity group-hover/item:opacity-100"
+        />
+      </div>
     </>
   );
 }

@@ -1,6 +1,7 @@
-import type { GraphEdge, GraphNode, GraphSnapshot } from "@/features/graph/types";
+import type { GraphEdge, GraphNode } from "@/features/graph/types";
 import * as d3 from "d3";
 import { useEffect, useRef } from "react";
+import type { GraphViewProps } from "@/features/graph/graph-view-types";
 import {
   buildEdgeMetadata,
   buildLabelZoomThresholds,
@@ -10,20 +11,6 @@ import {
   renderGraph,
   type CanvasDragSubject,
 } from "@/features/graph/build-d3-graph";
-
-type Props = {
-  graphData: GraphSnapshot | null;
-  visibleNodeIds: Set<string>;
-  visibleEdgeIds: Set<string>;
-  hoveredNodeId?: string | null;
-  hoveredEdgeIds?: Set<string>;
-  selectedNodeId?: string | null;
-  onEdgeHoverChange?: (edgeIds: string[]) => void;
-  onNodeHoverChange?: (fqdn: string | null) => void;
-  onNodeHoverPositionChange?: (position: { x: number; y: number } | null) => void;
-  onNodeSelect?: (fqdn: string) => void;
-  onStageClick?: () => void;
-};
 
 export default function GraphViewD3({
   graphData,
@@ -37,7 +24,7 @@ export default function GraphViewD3({
   onNodeHoverPositionChange,
   onNodeSelect,
   onStageClick,
-}: Props) {
+}: GraphViewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const requestRenderRef = useRef<() => void>(() => { });
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
@@ -249,12 +236,11 @@ export default function GraphViewD3({
       canvas.width = Math.floor(width * pixelRatio);
       canvas.height = Math.floor(height * pixelRatio);
 
+      // Update force targets without restarting — avoids layout jumps on panel resize.
       simulation
         .force("center", d3.forceCenter(width / 2, height / 2))
         .force("x", d3.forceX(width / 2).strength(0.04))
-        .force("y", d3.forceY(height / 2).strength(0.04))
-        .alpha(0.35)
-        .restart();
+        .force("y", d3.forceY(height / 2).strength(0.04));
 
       requestRender();
     }

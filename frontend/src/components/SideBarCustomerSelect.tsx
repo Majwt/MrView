@@ -7,6 +7,7 @@ import { useNavigate } from "react-router";
 function SidebarCustomerSelect() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedValue, setSelectedValue] = useState("");
 
   const [customers, setCustomers] = useState<Customer[]>([]);
 
@@ -23,9 +24,9 @@ function SidebarCustomerSelect() {
 
 
   return (
-    <Command className="rounded-md border">
+    <Command className="rounded-md border" value={selectedValue} onValueChange={setSelectedValue}>
       <CommandInput placeholder="Search customers..." value={searchTerm} onValueChange={setSearchTerm} />
-      <CommandList>
+      <CommandList onMouseLeave={() => setSelectedValue("")}>
         <CommandEmpty>No customers found.</CommandEmpty>
         <CommandGroup heading="Customers">
           {customers.map((customer) => (

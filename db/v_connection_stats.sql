@@ -10,8 +10,8 @@ AS
             edge_key,
             id         = MAX(id),
             seen_count = COUNT_BIG(*),
-            first_seen = CAST(MIN(observed_date) AS datetime2(0)),
-            last_seen  = CAST(MAX(observed_date) AS datetime2(0))
+            first_seen = MIN(observed_at),
+            last_seen  = MAX(observed_at)
         FROM dbo.connection_edge
         GROUP BY edge_key
     )

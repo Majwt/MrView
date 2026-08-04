@@ -4,24 +4,27 @@ import { applyGraphFilters } from "@/features/filters/apply-graph-filters";
 import { buildFilterSuggestions } from "@/features/filters/filter-suggestions";
 import { filtersReducer } from "@/features/filters/filters-reducer";
 import { applyGraphDelta } from "@/features/graph/apply-graph-delta";
+import type { GraphRenderer } from "@/features/graph/graph-view-types";
 import { normalizeGraphSnapshot } from "@/features/graph/normalize-graph-snapshot";
-import type { GraphEdge, GraphSnapshot } from "@/features/graph/types";
+import type { GraphEdge, GraphNode, GraphSnapshot } from "@/features/graph/types";
 import { readUrlState, writeUrlState } from "@/features/url-state";
-import { X, Maximize2, Minimize2 } from "lucide-react";
+import { X, PanelRight, PanelBottom } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
 import FilterBar from "./FilterBar";
 import GraphQuickFilters, { type QuickFilters } from "./GraphQuickFilters";
-import GraphViewD3 from "./GraphViewD3";
+import GraphView from "./GraphView";
 import NodeDetailsPanel from "./NodeDetailsPanel";
-import { type TableConnection, connectionColumns } from "./table/connection-columns";
+import { createConnectionColumns, type TableConnection } from "./table/connection-columns";
 import { DataTable } from "./table/data-table";
 
 import { Input } from "./ui/input";
+import { Switch } from "./ui/switch";
 import { useParams } from "react-router";
 import { useGraphStats } from "@/features/graph/GraphStatsContext";
 
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
+const GRAPH_RENDERER_STORAGE_KEY = "graph.renderer"
 
 
 export default function GraphPage() {
@@ -60,9 +63,13 @@ export default function GraphPage() {
   });
 
   const [isLoadingNodeDetails, setIsLoadingNodeDetails] = useState(false);
-  const nodeDetailsCacheRef = useRef(new Map<string, object>());
+  const nodeDetailsCacheRef = useRef(new Map<string, Partial<GraphNode>>());
+  const nodeDetailsInFlightRef = useRef(new Set<string>());
+  const hoveredNodeFqdnRef = useRef<string | null>(null);
+  const [hoveredNodeDetails, setHoveredNodeDetails] = useState<Partial<GraphNode> | null>(null);
   const snapshotRef = useRef(snapshot);
   useEffect(() => { snapshotRef.current = snapshot; }, [snapshot]);
+  useEffect(() => { hoveredNodeFqdnRef.current = hoveredNodeFqdn; }, [hoveredNodeFqdn]);
   const quickFiltersRef = useRef(quickFilters);
   useEffect(() => { quickFiltersRef.current = quickFilters; }, [quickFilters]);
 
@@ -72,9 +79,21 @@ export default function GraphPage() {
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialUrlState.filters);
   const filterSuggestions = useMemo(() => buildFilterSuggestions(snapshot), [snapshot]);
 
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showAside, setShowAside] = useState(true);
+  const [showTable, setShowTable] = useState(true);
   const [asideWidth, setAsideWidth] = useState(440);
-  const [tableHeight, setTableHeight] = useState(260);
+  const [tableHeight, setTableHeight] = useState(440);
+  const quickFiltersRight = showAside ? asideWidth + 12 : 12;
+  const controlsRight = showAside ? asideWidth + 8 : 8;
+  const rendererToggleRight = controlsRight + 88;
+  const [renderer, setRenderer] = useState<GraphRenderer>(() => {
+    const stored = window.localStorage.getItem(GRAPH_RENDERER_STORAGE_KEY)
+    return stored === "sigma" ? "sigma" : "d3"
+  })
+
+  useEffect(() => {
+    window.localStorage.setItem(GRAPH_RENDERER_STORAGE_KEY, renderer)
+  }, [renderer])
 
   function startAsideResize(e: React.MouseEvent) {
     e.preventDefault();
@@ -152,7 +171,12 @@ export default function GraphPage() {
     [snapshot],
   );
   const selectedNode = selectedNodeFqdn ? nodesByFqdn.get(selectedNodeFqdn) : undefined;
-  const contextNode = hoveredNodeFqdn ? nodesByFqdn.get(hoveredNodeFqdn) : undefined;
+  const hoveredNodeBase = hoveredNodeFqdn ? nodesByFqdn.get(hoveredNodeFqdn) : undefined;
+  const contextNode = useMemo(() => {
+    if (!hoveredNodeBase) return undefined;
+    if (!hoveredNodeDetails) return hoveredNodeBase;
+    return { ...hoveredNodeBase, ...hoveredNodeDetails };
+  }, [hoveredNodeBase, hoveredNodeDetails]);
 
   const tableConnections: TableConnection[] = useMemo(() => {
     if (!fullEdges) return [];
@@ -201,6 +225,11 @@ export default function GraphPage() {
       lastSeen: edge.last_seen,
     }));
   }, [fullEdges, serverFilteredCiids, selectedNodeFqdn, globalSearch, snapshot?.nodes]);
+
+  const connectionColumns = useMemo(
+    () => createConnectionColumns((fqdn) => setSelectedNodeFqdn(fqdn)),
+    [],
+  );
 
   function selectNodeConnections(fqdn: string) {
     setSelectedNodeFqdn(fqdn);
@@ -347,8 +376,8 @@ export default function GraphPage() {
     };
   }, [customerId, snapshot, quickFilters]);
 
-  // Shared helper: fetch and merge node details into snapshot (fire-and-forget)
-  const prefetchNodeDetails = useCallback((fqdn: string) => {
+  // Shared helper: fetch details either into snapshot (D3) or hover-only state (Sigma).
+  const prefetchNodeDetails = useCallback((fqdn: string, mode: "snapshot" | "hover") => {
     const current = snapshotRef.current;
     if (!current) return;
     const node = current.nodes.find((n) => n.fqdn === fqdn);
@@ -356,19 +385,34 @@ export default function GraphPage() {
     const ciid = node.ciid;
     const cached = nodeDetailsCacheRef.current.get(ciid);
     if (cached) {
-      setSnapshot((s) =>
-        s ? { ...s, nodes: s.nodes.map((n) => (n.fqdn === fqdn ? { ...n, ...cached } : n)) } : s,
-      );
+      if (mode === "snapshot") {
+        setSnapshot((s) =>
+          s ? { ...s, nodes: s.nodes.map((n) => (n.fqdn === fqdn ? { ...n, ...cached } : n)) } : s,
+        );
+      } else if (hoveredNodeFqdnRef.current === fqdn) {
+        setHoveredNodeDetails(cached);
+      }
       return;
     }
+
+    if (nodeDetailsInFlightRef.current.has(ciid)) return;
+    nodeDetailsInFlightRef.current.add(ciid);
+
     fetchNodeDetails(ciid)
       .then((details) => {
         nodeDetailsCacheRef.current.set(ciid, details);
-        setSnapshot((s) =>
-          s ? { ...s, nodes: s.nodes.map((n) => (n.fqdn === fqdn ? { ...n, ...details } : n)) } : s,
-        );
+        if (mode === "snapshot") {
+          setSnapshot((s) =>
+            s ? { ...s, nodes: s.nodes.map((n) => (n.fqdn === fqdn ? { ...n, ...details } : n)) } : s,
+          );
+        } else if (hoveredNodeFqdnRef.current === fqdn) {
+          setHoveredNodeDetails(details);
+        }
       })
-      .catch((err) => console.error("Failed to fetch node details", err));
+      .catch((err) => console.error("Failed to fetch node details", err))
+      .finally(() => {
+        nodeDetailsInFlightRef.current.delete(ciid);
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazy-load node details when a managed node is selected (also drives the loading indicator)
@@ -400,8 +444,18 @@ export default function GraphPage() {
 
   // Pre-fetch details on hover so the tooltip can show ciid immediately
   useEffect(() => {
-    if (hoveredNodeFqdn) prefetchNodeDetails(hoveredNodeFqdn);
-  }, [hoveredNodeFqdn, prefetchNodeDetails]);
+    if (!hoveredNodeFqdn) {
+      setHoveredNodeDetails(null);
+      return;
+    }
+    if (renderer === "d3") {
+      prefetchNodeDetails(hoveredNodeFqdn, "snapshot");
+      return;
+    }
+
+    setHoveredNodeDetails(null);
+    prefetchNodeDetails(hoveredNodeFqdn, "hover");
+  }, [hoveredNodeFqdn, prefetchNodeDetails, renderer]);
 
   // Server-side attribute filters (ip, mac, customer, first_seen, last_seen)
   const SERVER_SIDE_FIELDS = useMemo(() => new Set(["ip", "mac", "customer", "first_seen", "last_seen"]), []);
@@ -439,10 +493,11 @@ export default function GraphPage() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
 
-          <section className="relative flex min-h-0 flex-1 border-b">
-            <div className="relative flex-1 min-h-0">
+          <div className="relative flex-1 min-h-0 overflow-hidden">
+            <div className="absolute inset-0">
               <GraphQuickFilters
                 quickFilters={quickFilters}
+                rightOffset={quickFiltersRight}
                 onToggleIsolated={() =>
                   setQuickFilters((prev) => ({ ...prev, hideIsolatedNodes: !prev.hideIsolatedNodes }))
                 }
@@ -453,20 +508,42 @@ export default function GraphPage() {
                   setQuickFilters((prev) => ({ ...prev, staleThresholdHours: days }))
                 }
               />
-              <button
-                type="button"
-                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                className="absolute top-2 right-2 z-20 rounded-md border bg-background/80 p-1.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                onClick={() => setIsFullscreen((v) => !v)}
-              >
-                {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-              </button>
+              <div className="absolute top-3 z-20 flex gap-1" style={{ right: controlsRight }}>
+                <button
+                  type="button"
+                  aria-label={showTable ? "Hide table" : "Show table"}
+                  className="rounded-md border bg-background/80 p-1.5 text-muted-foreground hover:bg-background hover:text-foreground data-[active=true]:text-foreground data-[active=true]:bg-background"
+                  data-active={showTable}
+                  onClick={() => setShowTable((v) => !v)}
+                >
+                  <PanelBottom className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={showAside ? "Hide details panel" : "Show details panel"}
+                  className="rounded-md border bg-background/80 p-1.5 text-muted-foreground hover:bg-background hover:text-foreground data-[active=true]:text-foreground data-[active=true]:bg-background"
+                  data-active={showAside}
+                  onClick={() => setShowAside((v) => !v)}
+                >
+                  <PanelRight className="size-4" />
+                </button>
+              </div>
+              <div className="absolute top-3 z-20 inline-flex items-center gap-3 rounded-md border bg-background/90 px-2 py-1 text-xs shadow-sm" style={{ right: rendererToggleRight }}>
+                <span className={renderer === "d3" ? "font-semibold text-foreground" : "text-muted-foreground"}>D3</span>
+                <Switch
+                  aria-label="Switch graph renderer between D3 and Sigma"
+                  checked={renderer === "sigma"}
+                  onCheckedChange={(checked) => setRenderer(checked ? "sigma" : "d3")}
+                />
+                <span className={renderer === "sigma" ? "font-semibold text-foreground" : "text-muted-foreground"}>Sigma</span>
+              </div>
               {error ? (
                 <div className="p-6 text-sm text-destructive">{error}</div>
               ) : isLoading ? (
                 <div className="p-6 text-sm text-muted-foreground">Loading graph...</div>
               ) : snapshot ? (
-                <GraphViewD3
+                <GraphView
+                  renderer={renderer}
                   graphData={snapshot}
                   visibleEdgeIds={visibleEdgeIds}
                   visibleNodeIds={visibleNodeIds}
@@ -532,10 +609,10 @@ export default function GraphPage() {
                 </>) : null}
               </div>
             </div>
-            {!isFullscreen && (
+            {showAside && (
               <aside
                 style={{ width: asideWidth }}
-                className="relative shrink-0 border-l overflow-y-auto"
+                className="absolute top-0 right-0 bottom-0 border-l overflow-y-auto bg-background z-10"
               >
                 {/* drag handle on the left edge */}
                 <div
@@ -553,9 +630,8 @@ export default function GraphPage() {
                 )}
               </aside>
             )}
-          </section>
 
-          {!isFullscreen && <section className="relative flex flex-col overflow-hidden" style={{ height: tableHeight }}>
+          {showTable && <section className="absolute left-0 right-0 bottom-0 flex flex-col overflow-hidden border-t bg-background z-10" style={{ height: tableHeight }}>
             {/* drag handle on the top edge */}
             <div
               className="absolute inset-x-0 top-0 h-1 cursor-row-resize hover:bg-primary/40 active:bg-primary/60 z-10"
@@ -600,6 +676,8 @@ export default function GraphPage() {
             />
             </div>
           </section>}
+
+          </div>
 
     </div>
   )
