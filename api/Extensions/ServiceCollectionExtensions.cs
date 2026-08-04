@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DashboardService>();
         services.AddScoped<TokenService>();
         services.AddSingleton<Db>();
+        services.AddControllers();
 
         services.AddResponseCompression(options => { options.EnableForHttps = true; });
         services.AddHealthChecks();

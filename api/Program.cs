@@ -1,17 +1,9 @@
 using Api.Auth;
-using Api.Database;
 using Api.Extensions;
 using Api.Models;
 using Api.Services;
-using Api.Serialization;
-using Microsoft.IdentityModel.Protocols;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
-using Microsoft.IdentityModel.Tokens;
 using System.Globalization;
-using System.IdentityModel.Tokens.Jwt;
-using System.Net.Http.Headers;
 using System.Security.Claims;
-using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,144 +29,7 @@ app.Logger.LogInformation("Starting API v{0}", typeof(Program).Assembly.GetName(
 app.MapHealthChecks("/api/healthz");
 app.MapHealthChecks("/");
 
-app.MapGet("/api/auth/config", (IConfiguration config) =>
-{
-    var authority = config["Oidc:Authority"];
-    return Results.Ok(new
-    {
-        oidc_enabled = !string.IsNullOrEmpty(authority),
-        oidc_authority = authority ?? "",
-        oidc_client_id = config["Oidc:ClientId"] ?? "",
-        oidc_scope = "openid profile",
-    });
-});
-
-app.MapPost("/api/auth/login", async (LoginRequest req, IConfiguration config, Db db, TokenService ts, HttpContext ctx) =>
-{
-    if (string.IsNullOrEmpty(config["Jwt:SigningKey"]))
-        return Results.Problem("Login endpoint not available: Jwt:SigningKey is not configured.");
-
-    var users = config.GetSection("Auth:Users").Get<List<AuthUser>>() ?? [];
-    var match = users.FirstOrDefault(u =>
-        u.Username == req.Username && u.Password == req.Password);
-
-    if (match is null)
-        return Results.Unauthorized();
-
-    var sessionId = await db.CreateSessionAsync(match.Username, match.Role, match.CustomerId);
-    var (raw, hash) = ts.GenerateRefreshToken();
-    await db.CreateRefreshTokenAsync(sessionId, Guid.NewGuid(), hash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
-    RefreshTokenCookieWriter.SetRefreshCookie(ctx, raw, ts.RefreshTokenDays);
-    return Results.Ok(new { token = ts.MintAccessToken(sessionId.ToString(), match.Username, match.Role, match.CustomerId) });
-});
-
-app.MapPost("/api/auth/oidc-exchange", async (OidcExchangeRequest req, IConfiguration config, IServiceProvider sp, Db db, TokenService ts, HttpContext ctx) =>
-{
-    var key = config["Jwt:SigningKey"];
-    if (string.IsNullOrEmpty(key))
-        return Results.Problem("Local signing key not configured.");
-
-    var oidcConfigMgr = sp.GetService<IConfigurationManager<OpenIdConnectConfiguration>>();
-    if (oidcConfigMgr is null)
-        return Results.Problem("OIDC exchange not configured.");
-
-    OpenIdConnectConfiguration disco;
-    try { disco = await oidcConfigMgr.GetConfigurationAsync(CancellationToken.None); }
-    catch { return Results.Problem("Unable to reach OIDC discovery endpoint."); }
-
-    var clientId = config["Oidc:ClientId"];
-    var validation = new TokenValidationParameters
-    {
-        IssuerSigningKeys = disco.SigningKeys,
-        ValidIssuer = config["Oidc:Authority"],
-        ValidateAudience = !string.IsNullOrEmpty(clientId),
-        ValidAudiences = string.IsNullOrEmpty(clientId) ? null : [clientId],
-        ValidateLifetime = true,
-    };
-
-    ClaimsPrincipal principal;
-    try { principal = new JwtSecurityTokenHandler().ValidateToken(req.Token, validation, out _); }
-    catch { return Results.Unauthorized(); }
-
-    // Groups/roles absent from access token — fetch from userinfo endpoint
-    var incomingList = principal.FindAll("groups")
-        .Concat(principal.FindAll("roles"))
-        .Concat(principal.FindAll("role"))
-        .Select(c => c.Value)
-        .ToList();
-
-    string? name = principal.FindFirstValue("name") ?? principal.FindFirstValue("preferred_username") ?? principal.FindFirstValue("email");
-    string? cid = principal.FindFirstValue("customer_id") ?? principal.FindFirstValue("extension_customer_id");
-
-    if (incomingList.Count == 0 && !string.IsNullOrEmpty(disco.UserInfoEndpoint))
-    {
-        var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", req.Token);
-        var resp = await http.GetAsync(disco.UserInfoEndpoint);
-        if (resp.IsSuccessStatusCode)
-        {
-            var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync()).RootElement;
-            static string? Str(JsonElement e) => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText();
-            foreach (var prop in new[] { "groups", "roles", "role" })
-                if (doc.TryGetProperty(prop, out var el))
-                    incomingList.AddRange(el.ValueKind == JsonValueKind.Array
-                        ? el.EnumerateArray().Select(e => Str(e) ?? "").Where(s => s != "")
-                        : [Str(el) ?? ""]);
-            name ??= doc.TryGetProperty("name", out var n) ? Str(n)
-                   : doc.TryGetProperty("preferred_username", out var u) ? Str(u)
-                   : doc.TryGetProperty("email", out var e) ? Str(e) : null;
-            if (cid is null && doc.TryGetProperty("customer_id", out var cidEl)) cid = Str(cidEl);
-        }
-    }
-
-    var roleMapping = config.GetSection("Oidc:RoleMapping").Get<Dictionary<string, string>>() ?? [];
-    string? appRole = roleMapping.Count > 0
-        ? incomingList.Select(g => roleMapping.GetValueOrDefault(g)).FirstOrDefault(r => r != null)
-        : incomingList.FirstOrDefault(r => r == "Admin" || r == "Customer");
-
-    if (appRole is null)
-        return Results.Forbid();
-
-    var issuedClaims = new List<Claim> { new("name", name ?? ""), new("role", appRole) };
-    if (cid != null) issuedClaims.Add(new Claim("customer_id", cid));
-
-    var customerIdInt = cid != null && int.TryParse(cid, out var cidParsed) ? cidParsed : (int?)null;
-    var sessionId = await db.CreateSessionAsync(name ?? "", appRole, customerIdInt);
-    var (raw, hash) = ts.GenerateRefreshToken();
-    await db.CreateRefreshTokenAsync(sessionId, Guid.NewGuid(), hash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
-    RefreshTokenCookieWriter.SetRefreshCookie(ctx, raw, ts.RefreshTokenDays);
-    return Results.Ok(new { token = ts.MintAccessToken(sessionId.ToString(), name ?? "", appRole, customerIdInt) });
-});
-
-app.MapPost("/api/auth/refresh", async (HttpContext ctx, Db db, TokenService ts) =>
-{
-    var raw = ctx.Request.Cookies["axilanswer_rt"];
-    if (string.IsNullOrEmpty(raw)) return Results.Unauthorized();
-
-    var result = await db.RedeemRefreshTokenAsync(ts.HashToken(raw));
-    if (result is null) return Results.Unauthorized();
-
-    var (session, compromised) = result.Value;
-    if (compromised)
-    {
-        ctx.Response.Cookies.Delete("axilanswer_rt", new CookieOptions { Path = "/api/auth" });
-        return Results.Unauthorized();
-    }
-
-    var (newRaw, newHash) = ts.GenerateRefreshToken();
-    await db.CreateRefreshTokenAsync(session.SessionId, session.FamilyId, newHash, DateTime.UtcNow.AddDays(ts.RefreshTokenDays));
-    RefreshTokenCookieWriter.SetRefreshCookie(ctx, newRaw, ts.RefreshTokenDays);
-    return Results.Ok(new { token = ts.MintAccessToken(session.SessionId.ToString(), session.Subject, session.Role, session.CustomerId) });
-});
-
-app.MapPost("/api/auth/logout", async (ClaimsPrincipal user, HttpContext ctx, Db db) =>
-{
-    var sid = user.FindFirstValue("sid");
-    if (sid != null && Guid.TryParse(sid, out var sessionId))
-        await db.RevokeSessionAsync(sessionId, "logout");
-    ctx.Response.Cookies.Delete("axilanswer_rt", new CookieOptions { Path = "/api/auth" });
-    return Results.Ok();
-}).RequireAuthorization();
+app.MapControllers();
 
 // Layout:
 
