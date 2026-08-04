@@ -16,7 +16,10 @@ builder.Logging.AddConsole();
 var app = builder.Build();
 
 app.UseResponseCompression();
-app.UseHttpsRedirection();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHttpsRedirection();
+}
 app.UseAuthentication();
 app.UseAuthorization();
 app.Logger.LogInformation("Starting API v{0}", typeof(Program).Assembly.GetName().Version);
@@ -31,3 +34,5 @@ try
     app.Run();
 }
 catch (OperationCanceledException) { }
+
+public partial class Program { }
