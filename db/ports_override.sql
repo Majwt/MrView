@@ -62,7 +62,9 @@ USING (VALUES
     (8443, 'tcp', 'HTTPS-Alt', NULL),
     (9000, 'tcp', 'SQL Proxy via LK', NULL),
     (12202, 'tcp', 'Graylog', NULL),
-    (24158, 'tcp', 'WMI', NULL)
+    (24158, 'tcp', 'WMI', NULL),
+    (49667, 'tcp', 'RPC', NULL),
+    (49668, 'tcp', 'RPC', NULL)
 ) AS source(port_number, protocol, service_name, description)
 ON target.port_number = source.port_number
    AND target.protocol = source.protocol

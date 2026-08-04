@@ -69,8 +69,8 @@ public class Db
         await connection.OpenAsync();
 
         var activeFilter = queryParams.ManagedOnly
-            ? "e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
-            : "(na.is_active = 1 OR nb.is_active = 1)";
+            ? "AND e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
+            : "";
         var staleEdgeFilter = queryParams.MinLastSeenHours.HasValue ? "AND e.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
         var sql = $"""
             SELECT
@@ -105,7 +105,7 @@ public class Db
                 ORDER BY CASE WHEN p.protocol = e.protocol THEN 0 ELSE 1 END
             ) ps
             WHERE e.seen_count > @SeenCountThreshold
-              AND {activeFilter}
+              {activeFilter}
               {staleEdgeFilter}
               AND (
                     e.last_seen > @LastSeen
@@ -137,8 +137,8 @@ public class Db
         await connection.OpenAsync();
 
         var activeFilter = queryParams.ManagedOnly
-            ? "e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
-            : "(na.is_active = 1 OR nb.is_active = 1)";
+            ? "AND e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
+            : "";
         var staleEdgeFilter = queryParams.MinLastSeenHours.HasValue ? "AND e.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
         var sql = $"""
             SELECT
@@ -177,7 +177,7 @@ public class Db
                     na.group_id = @CustomerId
                     OR nb.group_id = @CustomerId
               )
-              AND {activeFilter}
+              {activeFilter}
               {staleEdgeFilter}
               AND (
                     e.last_seen > @LastSeen
@@ -211,8 +211,8 @@ public class Db
         await connection.OpenAsync();
 
         var activeFilter = queryParams.ManagedOnly
-            ? "e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
-            : "(na.is_active = 1 OR nb.is_active = 1)";
+            ? "AND e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
+            : "";
         var staleEdgeFilter = queryParams.MinLastSeenHours.HasValue ? "AND e.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
         var sql = $"""
             WITH base AS (
@@ -228,7 +228,7 @@ public class Db
                 LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
                 LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
                 WHERE e.seen_count > @SeenCountThreshold
-                  AND {activeFilter}
+                  {activeFilter}
                   {staleEdgeFilter}
             )
             SELECT
@@ -279,8 +279,8 @@ public class Db
         await connection.OpenAsync();
 
         var activeFilter = queryParams.ManagedOnly
-            ? "e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
-            : "(na.is_active = 1 OR nb.is_active = 1)";
+            ? "AND e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL"
+            : "";
         var staleEdgeFilter = queryParams.MinLastSeenHours.HasValue ? "AND e.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
         var sql = $"""
             WITH base AS (
@@ -297,7 +297,7 @@ public class Db
                 LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
                 WHERE e.seen_count > @SeenCountThreshold
                   AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)
-                  AND {activeFilter}
+                  {activeFilter}
                   {staleEdgeFilter}
             )
             SELECT
@@ -441,30 +441,30 @@ public class Db
 
         var isolatedFilter = queryParams.ExcludeIsolated ? "AND COALESCE(ea.edge_count, 0) > 0" : "";
         var staleFilter = queryParams.MinLastSeenHours.HasValue ? "AND n.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
-        var managedEdgeFilter = queryParams.ManagedOnly ? "AND e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL" : "";
+        var managedHavingFilter = queryParams.ManagedOnly ? "AND MAX(e.endpoint_a_ciid) IS NOT NULL AND MAX(e.endpoint_b_ciid) IS NOT NULL" : "";
 
         var sql = $"""
-            WITH edge_agg AS (
+            WITH edge_base AS (
                 SELECT
-                    node_ciid,
-                    edge_count = COUNT_BIG(*),
+                    endpoint_a_ciid = MAX(e.endpoint_a_ciid),
+                    endpoint_b_ciid = MAX(e.endpoint_b_ciid),
+                    seen_count      = COUNT_BIG(*)
+                FROM {_edgesTable} e
+                GROUP BY e.edge_key
+                HAVING COUNT_BIG(*) > @SeenCountThreshold
+                {managedHavingFilter}
+            ),
+            edge_agg AS (
+                SELECT
+                    node_ciid        = ciid,
+                    edge_count       = COUNT_BIG(*),
                     connection_count = SUM(seen_count)
                 FROM (
-                    SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgeStatsView} e
-                    WHERE e.seen_count > @SeenCountThreshold
-                      {managedEdgeFilter}
-
+                    SELECT ciid = endpoint_a_ciid, seen_count FROM edge_base WHERE endpoint_a_ciid IS NOT NULL
                     UNION ALL
-
-                    SELECT e.endpoint_b_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgeStatsView} e
-                    WHERE e.seen_count > @SeenCountThreshold
-                      AND e.endpoint_b_ciid <> e.endpoint_a_ciid
-                      {managedEdgeFilter}
+                    SELECT ciid = endpoint_b_ciid, seen_count FROM edge_base WHERE endpoint_b_ciid IS NOT NULL AND endpoint_b_ciid <> endpoint_a_ciid
                 ) x
-                WHERE node_ciid IS NOT NULL
-                GROUP BY node_ciid
+                GROUP BY ciid
             )
             SELECT
                 node_id = CAST(ABS(CHECKSUM(n.ciid)) AS bigint),
@@ -508,52 +508,42 @@ public class Db
 
         var isolatedFilter = queryParams.ExcludeIsolated ? "AND COALESCE(ea.edge_count, 0) > 0" : "";
         var staleFilter = queryParams.MinLastSeenHours.HasValue ? "AND n.last_seen >= DATEADD(HOUR, -@MinLastSeenHours, GETUTCDATE())" : "";
-        var managedEdgeFilter = queryParams.ManagedOnly ? "AND e.endpoint_a_ciid IS NOT NULL AND e.endpoint_b_ciid IS NOT NULL" : "";
+        var managedHavingFilter = queryParams.ManagedOnly ? "AND MAX(e.endpoint_a_ciid) IS NOT NULL AND MAX(e.endpoint_b_ciid) IS NOT NULL" : "";
 
         var sql = $"""
-            WITH customer_edge_ciids AS (
-                -- All node ciids that appear as an endpoint in any edge involving this customer
-                SELECT e.endpoint_a_ciid AS ciid
-                FROM {_edgeStatsView} e
-                LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
-                LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
-                WHERE e.seen_count > @SeenCountThreshold
-                  AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)
-                  AND (na.is_active = 1 OR nb.is_active = 1)
-                  AND e.endpoint_a_ciid IS NOT NULL
-
-                UNION
-
-                SELECT e.endpoint_b_ciid
-                FROM {_edgeStatsView} e
-                LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
-                LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
-                WHERE e.seen_count > @SeenCountThreshold
-                  AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)
-                  AND (na.is_active = 1 OR nb.is_active = 1)
-                  AND e.endpoint_b_ciid IS NOT NULL
+            WITH edge_base AS (
+                -- single pass over connection_edge; spooled for reuse by customer_edge_ciids and edge_agg
+                SELECT
+                    endpoint_a_ciid = MAX(e.endpoint_a_ciid),
+                    endpoint_b_ciid = MAX(e.endpoint_b_ciid),
+                    seen_count      = COUNT_BIG(*)
+                FROM {_edgesTable} e
+                GROUP BY e.edge_key
+                HAVING COUNT_BIG(*) > @SeenCountThreshold
+                {managedHavingFilter}
+            ),
+            customer_edge_ciids AS (
+                SELECT DISTINCT ea.ciid
+                FROM (
+                    SELECT ciid = endpoint_a_ciid, other_ciid = endpoint_b_ciid FROM edge_base WHERE endpoint_a_ciid IS NOT NULL
+                    UNION ALL
+                    SELECT ciid = endpoint_b_ciid, other_ciid = endpoint_a_ciid FROM edge_base WHERE endpoint_b_ciid IS NOT NULL AND endpoint_b_ciid <> endpoint_a_ciid
+                ) ea
+                INNER JOIN {_nodesTable} na ON na.ciid = ea.ciid
+                LEFT JOIN {_nodesTable} nb ON nb.ciid = ea.other_ciid
+                WHERE (na.group_id = @CustomerId OR nb.group_id = @CustomerId)
             ),
             edge_agg AS (
                 SELECT
-                    node_ciid,
-                    edge_count = COUNT_BIG(*),
+                    node_ciid        = ciid,
+                    edge_count       = COUNT_BIG(*),
                     connection_count = SUM(seen_count)
                 FROM (
-                    SELECT e.endpoint_a_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgeStatsView} e
-                    WHERE e.seen_count > @SeenCountThreshold
-                      {managedEdgeFilter}
-
+                    SELECT ciid = endpoint_a_ciid, seen_count FROM edge_base WHERE endpoint_a_ciid IN (SELECT ciid FROM customer_edge_ciids)
                     UNION ALL
-
-                    SELECT e.endpoint_b_ciid AS node_ciid, e.id, e.seen_count
-                    FROM {_edgeStatsView} e
-                    WHERE e.seen_count > @SeenCountThreshold
-                      AND e.endpoint_b_ciid <> e.endpoint_a_ciid
-                      {managedEdgeFilter}
+                    SELECT ciid = endpoint_b_ciid, seen_count FROM edge_base WHERE endpoint_b_ciid IN (SELECT ciid FROM customer_edge_ciids) AND endpoint_b_ciid <> endpoint_a_ciid
                 ) x
-                WHERE node_ciid IS NOT NULL
-                GROUP BY node_ciid
+                GROUP BY ciid
             )
             SELECT
                 node_id = CAST(ABS(CHECKSUM(n.ciid)) AS bigint),
@@ -631,7 +621,6 @@ public class Db
                         FOR JSON PATH
                     )
                 FROM {_interfacesTable} ni
-                WHERE ni.is_active = 1
                 GROUP BY ni.ciid
             ),
             edge_agg AS (
@@ -827,7 +816,6 @@ public class Db
                         FOR JSON PATH
                     )
                 FROM {_interfacesTable} ni
-                where ni.is_active = 1
                 GROUP BY ni.ciid
             ),
             edge_agg AS (
@@ -923,7 +911,6 @@ public class Db
                         FOR JSON PATH
                     )
                 FROM {_interfacesTable} ni
-                WHERE ni.is_active = 1
                 GROUP BY ni.ciid
             ),
             edge_agg AS (
@@ -1053,7 +1040,6 @@ public class Db
                 group_name
             FROM {_nodesTable}
             WHERE group_id IS NOT NULL
-                            AND is_active = 1
             ORDER BY group_name;
             """,
             connection
@@ -1083,42 +1069,36 @@ public class Db
         await using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
 
-        var customerJoin = customerId != -1
-            ? $"LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid"
-            : "";
-        var customerEdgeFilter = customerId != -1
-            ? "AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)"
-            : "";
-        var customerNodeFilter = customerId != -1
-            ? "AND group_id = @CustomerId"
-            : "";
-
-        var sql = $"""
-            SELECT
-                total_edges = (
-                    SELECT COUNT_BIG(*)
+        string sql;
+        if (customerId == -1)
+        {
+            sql = $"""
+                SELECT
+                    total_edges           = COUNT_BIG(*),
+                    active_nodes          = (SELECT COUNT_BIG(*) FROM {_nodesTable} WHERE last_seen >= DATEADD(DAY, -7, GETUTCDATE())),
+                    total_seen_count      = ISNULL(SUM(seen_count), 0),
+                    new_edges_last_7_days = COUNT_BIG(CASE WHEN first_seen >= DATEADD(DAY, -7, GETUTCDATE()) THEN 1 END)
+                FROM {_edgeStatsView};
+                """;
+        }
+        else
+        {
+            sql = $"""
+                WITH customer_edges AS (
+                    SELECT e.seen_count, e.first_seen
                     FROM {_edgeStatsView} e
-                    {customerJoin}
-                    WHERE 1=1 {customerEdgeFilter}
-                ),
-                active_nodes = (
-                    SELECT COUNT_BIG(*)
-                    FROM {_nodesTable}
-                    WHERE last_seen >= DATEADD(DAY, -7, GETUTCDATE()) {customerNodeFilter}
-                ),
-                total_seen_count = (
-                    SELECT ISNULL(SUM(e.seen_count), 0)
-                    FROM {_edgeStatsView} e
-                    {customerJoin}
-                    WHERE 1=1 {customerEdgeFilter}
-                ),
-                new_edges_last_7_days = (
-                    SELECT COUNT_BIG(*)
-                    FROM {_edgeStatsView} e
-                    {customerJoin}
-                    WHERE e.first_seen >= DATEADD(DAY, -7, GETUTCDATE()) {customerEdgeFilter}
-                );
-            """;
+                    LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
+                    LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
+                    WHERE na.group_id = @CustomerId OR nb.group_id = @CustomerId
+                )
+                SELECT
+                    total_edges           = COUNT_BIG(*),
+                    active_nodes          = (SELECT COUNT_BIG(*) FROM {_nodesTable} WHERE last_seen >= DATEADD(DAY, -7, GETUTCDATE()) AND group_id = @CustomerId),
+                    total_seen_count      = ISNULL(SUM(seen_count), 0),
+                    new_edges_last_7_days = COUNT_BIG(CASE WHEN first_seen >= DATEADD(DAY, -7, GETUTCDATE()) THEN 1 END)
+                FROM customer_edges;
+                """;
+        }
 
         await using var command = new SqlCommand(sql, connection);
         if (customerId != -1)
@@ -1262,6 +1242,9 @@ public class Db
         await connection.OpenAsync();
 
         var customerFilter = customerId != -1 ? "AND n.group_id = @CustomerId" : "";
+        var customerEdgeAggFilter = customerId != -1
+            ? $"AND EXISTS (SELECT 1 FROM {_nodesTable} nc WHERE nc.group_id = @CustomerId AND (nc.ciid = e.endpoint_a_ciid OR nc.ciid = e.endpoint_b_ciid))"
+            : "";
 
         var sql = $"""
             WITH edge_agg AS (
@@ -1273,6 +1256,7 @@ public class Db
                     SELECT e.endpoint_a_ciid AS node_ciid, e.edge_key, e.seen_count
                     FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
+                      {customerEdgeAggFilter}
 
                     UNION ALL
 
@@ -1280,6 +1264,7 @@ public class Db
                     FROM {_edgeStatsView} e
                     WHERE e.seen_count > @SeenCountThreshold
                       AND e.endpoint_b_ciid <> e.endpoint_a_ciid
+                      {customerEdgeAggFilter}
                 ) x
                 WHERE node_ciid IS NOT NULL
                 GROUP BY node_ciid
@@ -1299,7 +1284,7 @@ public class Db
                 group_name = COALESCE(n.group_name, '')
             FROM {_nodesTable} n
             LEFT JOIN edge_agg ea ON ea.node_ciid = n.ciid
-            WHERE n.is_active = 1
+            WHERE 1=1
               {customerFilter}
             ORDER BY connection_count DESC;
             """;

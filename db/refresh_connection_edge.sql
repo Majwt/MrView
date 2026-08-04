@@ -325,6 +325,32 @@ BEGIN
                     CASE WHEN p.protocol = r.protocol THEN 0 ELSE 1 END,
                     p.source_table DESC
             ) ps
+        ),
+        -- merge same-edge same-day rows from both reporters so both process names land in one row
+        merged_rows AS (
+            SELECT
+                source_fqdn,
+                source_ipv4,
+                source_port             = MAX(source_port),
+                source_ciid             = MAX(source_ciid),
+                endpoint_a_process_name = MAX(endpoint_a_process_name),
+                endpoint_a_process_id   = MAX(endpoint_a_process_id),
+                target_fqdn,
+                target_ipv4,
+                target_port             = MAX(target_port),
+                target_ciid             = MAX(target_ciid),
+                endpoint_b_process_name = MAX(endpoint_b_process_name),
+                endpoint_b_process_id   = MAX(endpoint_b_process_id),
+                protocol,
+                service_port,
+                service_name            = MAX(service_name),
+                DateAdded               = MAX(DateAdded)
+            FROM source_rows
+            GROUP BY
+                source_fqdn, source_ipv4,
+                target_fqdn, target_ipv4,
+                protocol, service_port,
+                CAST(DateAdded AS date)
         )
         INSERT INTO dbo.connection_edge (
             endpoint_a_fqdn,
@@ -361,9 +387,13 @@ BEGIN
             protocol,
             service_port,
             service_name,
-            confidence,
+            confidence = CASE
+                WHEN endpoint_a_process_name IS NOT NULL AND endpoint_b_process_name IS NOT NULL THEN 95
+                WHEN endpoint_a_process_name IS NOT NULL OR  endpoint_b_process_name IS NOT NULL THEN 40
+                ELSE 10
+            END,
             DateAdded
-        FROM source_rows;
+        FROM merged_rows;
 
         COMMIT TRANSACTION;
     END TRY

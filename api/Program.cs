@@ -43,7 +43,9 @@ builder
 builder.Services.AddScoped<GraphService>();
 builder.Services.AddScoped<CustomerService>();
 builder.Services.AddScoped<DashboardService>();
-builder.Services.AddScoped<Db>();
+builder.Services.AddSingleton<Db>();
+
+builder.Services.AddResponseCompression(options => { options.EnableForHttps = true; });
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -88,7 +90,7 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
-
+app.UseResponseCompression();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
