@@ -55,6 +55,20 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router"],
+          "vendor-graph": ["graphology", "@react-sigma/core", "@sigma/edge-curve"],
+          "vendor-d3": ["d3"],
+          "vendor-charts": ["recharts"],
+          "vendor-auth": ["oidc-client-ts", "react-oidc-context"],
+          "vendor-ui": ["radix-ui", "lucide-react", "sonner", "vaul", "cmdk"],
+        },
+      },
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],

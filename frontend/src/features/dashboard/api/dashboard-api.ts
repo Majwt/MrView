@@ -18,7 +18,7 @@ export type NodeRow = {
   fqdn: string;
   hostname: string;
   os: string;
-  client_name: string;
+  client: string;
   client_version: string;
   distinct_edges: number;
   connection_count: number;

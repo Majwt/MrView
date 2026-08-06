@@ -49,16 +49,20 @@ const columns: ColumnDef<NodeRow>[] = [
   },
   {
     accessorKey: "os",
-    header: "OS",
+    header: "Operating System",
     cell: ({ row }) => (
       <span className="font-mono text-sm">{row.original.os}</span>
     ),
   },
   {
-    accessorKey: "client_name",
-    header: "Client Name",
+    accessorKey: "client",
+    header: "Client",
     cell: ({ row }) => (
-      <span className="font-mono text-sm">{row.original.client_name} {row.original.client_version}</span>
+      row.original.client === "unknown" ? (
+        <span className="font-mono text-sm text-muted-foreground">-</span>
+      ) : (
+        <span className="font-mono text-sm">{row.original.client} {row.original.client_version}</span>
+      )
     ),
   },
   {

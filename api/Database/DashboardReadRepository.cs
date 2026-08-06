@@ -298,9 +298,9 @@ public class DashboardReadRepository : IDashboardReadRepository
             rows.Add(new NodeRow(
                 Ciid: reader.GetString(ciidOrdinal),
                 Fqdn: reader.GetString(fqdnOrdinal),
-                Os: reader.GetString(os_VersionOrdinal),
-                Client: reader.GetString(clientNameOrdinal),
-                ClientVersion: reader.GetString(clientVersionOrdinal),
+                Os: reader.IsDBNull(os_VersionOrdinal) ? "Unknown" : reader.GetString(os_VersionOrdinal),
+                Client: reader.IsDBNull(clientNameOrdinal) ? "Unknown" : reader.GetString(clientNameOrdinal),
+                ClientVersion: reader.IsDBNull(clientVersionOrdinal) ? "Unknown" : reader.GetString(clientVersionOrdinal),
                 Hostname: reader.GetString(hostnameOrdinal),
                 DistinctEdges: reader.GetInt64(edgesOrdinal),
                 ConnectionCount: reader.GetInt64(connectionOrdinal),
