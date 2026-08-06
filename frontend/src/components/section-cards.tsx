@@ -3,13 +3,18 @@
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
-  CardAction,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { TrendingUpIcon } from "lucide-react"
+import {
+  Activity,
+  ArrowUpRight,
+  Gauge,
+  Network,
+  Sparkles,
+} from "lucide-react"
 import type { DashboardStats } from "@/api/dashboard-api"
 
 function fmt(value: number | undefined, loading: boolean): string {
@@ -18,88 +23,66 @@ function fmt(value: number | undefined, loading: boolean): string {
 }
 
 export function SectionCards({ stats, loading }: { stats: DashboardStats | null; loading?: boolean }) {
+  const items = [
+    {
+      label: "Distinct Connections",
+      value: fmt(stats?.total_edges, !!loading),
+      hint: "Unique source to destination paths",
+      detail: "Deduplicated edges",
+      icon: Network,
+    },
+    {
+      label: "Active Nodes",
+      value: fmt(stats?.active_nodes, !!loading),
+      hint: "Monitored endpoints",
+      detail: "Seen in the last 7 days",
+      icon: Gauge,
+    },
+    {
+      label: "Total Seen Events",
+      value: fmt(stats?.total_seen_count, !!loading),
+      hint: "Cumulative traffic reports",
+      detail: "Across all active edges",
+      icon: Activity,
+    },
+    {
+      label: "New This Week",
+      value: fmt(stats?.new_edges_last7_days, !!loading),
+      hint: "First observed in the last 7 days",
+      detail: "Emerging connections",
+      icon: Sparkles,
+    },
+  ] as const
+
   return (
-    <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
-      <Card className="@container/card">
-        <CardHeader>
-          <CardDescription>Distinct Connections</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            {fmt(stats?.total_edges, !!loading)}
-          </CardTitle>
-          <CardAction>
-            <Badge variant="outline">
-              <TrendingUpIcon />
-              Edges
-            </Badge>
-          </CardAction>
-        </CardHeader>
-        <CardFooter className="flex-col items-start gap-1.5 text-sm h-full">
-          <div className="line-clamp-1 flex gap-2 font-medium">
-            Unique source–destination pairs
-          </div>
-          <div className="text-muted-foreground">Deduplicated connection edges</div>
-        </CardFooter>
-      </Card>
-      <Card className="@container/card">
-        <CardHeader>
-          <CardDescription>Active Nodes</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            {fmt(stats?.active_nodes, !!loading)}
-          </CardTitle>
-          <CardAction>
-            <Badge variant="outline">
-              <TrendingUpIcon />
-              Nodes
-            </Badge>
-          </CardAction>
-        </CardHeader>
-        <CardFooter className="flex-col items-start gap-1.5 text-sm h-full">
-          <div className="line-clamp-1 flex gap-2 font-medium">
-            Monitored endpoints
-          </div>
-          <div className="text-muted-foreground">Managed nodes active within the last 7 days</div>
-        </CardFooter>
-      </Card>
-      <Card className="@container/card">
-        <CardHeader>
-          <CardDescription>Total Seen Events</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            {fmt(stats?.total_seen_count, !!loading)}
-          </CardTitle>
-          <CardAction>
-            <Badge variant="outline">
-              <TrendingUpIcon />
-              Events
-            </Badge>
-          </CardAction>
-        </CardHeader>
-        <CardFooter className="flex-col items-start gap-1.5 text-sm">
-          <div className="line-clamp-1 flex gap-2 font-medium">
-            Cumulative connection reports
-          </div>
-          <div className="text-muted-foreground">Sum of all seen events across all edges</div>
-        </CardFooter>
-      </Card>
-      <Card className="@container/card">
-        <CardHeader>
-          <CardDescription>New This Week</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            {fmt(stats?.new_edges_last_7_days, !!loading)}
-          </CardTitle>
-          <CardAction>
-            <Badge variant="outline">
-              <TrendingUpIcon />
-              +7d
-            </Badge>
-          </CardAction>
-        </CardHeader>
-        <CardFooter className="flex-col items-start gap-1.5 text-sm">
-          <div className="line-clamp-1 flex gap-2 font-medium">
-            Edges first seen in the last 7 days
-          </div>
-          <div className="text-muted-foreground">New connections discovered this week</div>
-        </CardFooter>
-      </Card>
+    <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+      {items.map((item) => {
+        const Icon = item.icon
+        return (
+          <Card key={item.label} className="surface-glass @container/card overflow-hidden border-border/70">
+            <CardHeader className="relative">
+              <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
+              <div className="mb-3 flex items-center justify-between">
+                <Badge variant="outline" className="border-primary/20 bg-primary/8 text-primary">
+                  <Icon className="mr-1 h-3.5 w-3.5" />
+                  Metric
+                </Badge>
+                <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <CardDescription>{item.label}</CardDescription>
+              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                {item.value}
+              </CardTitle>
+            </CardHeader>
+            <CardFooter className="flex flex-col items-start gap-1.5 text-sm">
+              <div className="line-clamp-1 flex gap-2 font-medium">
+                {item.hint}
+              </div>
+              <div className="text-muted-foreground">{item.detail}</div>
+            </CardFooter>
+          </Card>
+        )
+      })}
     </div>
   )
 }
