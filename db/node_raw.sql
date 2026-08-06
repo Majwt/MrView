@@ -15,6 +15,8 @@ CREATE TABLE dbo.node_raw (
     fqdn nvarchar(255) NOT NULL,
     os_version_family nvarchar(100) NULL,
     os_version_specifier nvarchar(255) NULL,
+    client_name nvarchar(100) NULL,
+    client_version nvarchar(255) NULL,
 
     ephemeral_port_start int NULL,
     ephemeral_port_end int NULL,

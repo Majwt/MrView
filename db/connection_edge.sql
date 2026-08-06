@@ -45,6 +45,8 @@ CREATE TABLE dbo.connection_edge (
         ), 2) PERSISTED,
 
     CONSTRAINT PK_connection_edge PRIMARY KEY (id),
+    -- SQL Server does not allow dual cascade paths from managed_node to both endpoint ciid FKs.
+    -- Cleanup is handled by trigger dbo.TR_managed_node_delete_connections.
     CONSTRAINT FK_connection_edge_a_managed_node
         FOREIGN KEY (endpoint_a_ciid) REFERENCES dbo.managed_node(ciid),
     CONSTRAINT FK_connection_edge_b_managed_node

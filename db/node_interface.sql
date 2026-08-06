@@ -21,7 +21,7 @@ CREATE TABLE dbo.node_interface (
 
     CONSTRAINT PK_node_interface PRIMARY KEY (ciid, mac_address),
     CONSTRAINT FK_node_interface_managed_node
-        FOREIGN KEY (ciid) REFERENCES dbo.managed_node(ciid)
+        FOREIGN KEY (ciid) REFERENCES dbo.managed_node(ciid) ON DELETE CASCADE
 );
 GO
 
