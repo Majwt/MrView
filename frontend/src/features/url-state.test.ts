@@ -10,6 +10,11 @@ describe("readUrlState", () => {
       globalSearch: "",
       selectedNodeFqdn: null,
       tableView: "nodes",
+      quickFilters: {
+        hideIsolatedNodes: true,
+        staleThresholdHours: 30 * 24,
+        managedOnly: false,
+      },
     });
   });
 });

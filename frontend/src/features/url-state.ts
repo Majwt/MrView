@@ -3,11 +3,18 @@ import type { FilterRule, FiltersState } from "./filters/types";
 
 export type TableView = "nodes" | "connections";
 
+export type GraphQuickFiltersState = {
+  hideIsolatedNodes: boolean;
+  staleThresholdHours: number | null;
+  managedOnly: boolean;
+};
+
 export type UrlState = {
   filters: FiltersState;
   globalSearch: string;
   selectedNodeFqdn: string | null;
   tableView: TableView;
+  quickFilters: GraphQuickFiltersState;
 };
 
 const validFields = new Set(filterFields.map((field) => field.value));
@@ -22,12 +29,29 @@ export function readUrlState(): UrlState {
   const view = params.get("view");
   const node = params.get("node");
   const search = params.get("q") ?? "";
+  const hideIsolatedParam = params.get("qi");
+  const managedOnlyParam = params.get("qm");
+  const staleThresholdParam = params.get("qs");
+
+  const staleThresholdHours =
+    staleThresholdParam === null
+      ? 30 * 24
+      : staleThresholdParam === "none"
+        ? null
+        : Number.isFinite(Number(staleThresholdParam))
+          ? Number(staleThresholdParam)
+          : 30 * 24;
 
   return {
     filters: { rules: decodeFilterRules(params.get("filters")) },
     globalSearch: search,
     selectedNodeFqdn: node || null,
     tableView: view === "connections" ? "connections" : "nodes",
+    quickFilters: {
+      hideIsolatedNodes: hideIsolatedParam === null ? true : hideIsolatedParam === "1",
+      managedOnly: managedOnlyParam === "1",
+      staleThresholdHours,
+    },
   };
 }
 
@@ -54,6 +78,20 @@ export function writeUrlState(state: UrlState) {
     params.set("filters", encodeFilterRules(state.filters.rules));
   }
 
+  if (!state.quickFilters.hideIsolatedNodes) {
+    params.set("qi", "0");
+  }
+
+  if (state.quickFilters.managedOnly) {
+    params.set("qm", "1");
+  }
+
+  if (state.quickFilters.staleThresholdHours === null) {
+    params.set("qs", "none");
+  } else if (state.quickFilters.staleThresholdHours !== 30 * 24) {
+    params.set("qs", String(state.quickFilters.staleThresholdHours));
+  }
+
   const query = params.toString();
   const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
 
@@ -68,6 +106,11 @@ function getDefaultUrlState(): UrlState {
     globalSearch: "",
     selectedNodeFqdn: null,
     tableView: "nodes",
+    quickFilters: {
+      hideIsolatedNodes: true,
+      managedOnly: false,
+      staleThresholdHours: 30 * 24,
+    },
   };
 }
 
