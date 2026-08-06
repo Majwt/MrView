@@ -21,6 +21,7 @@ export type GraphNode = d3.SimulationNodeDatum & {
   fqdn: string;
   hostname: string;
   ciid?: string;
+  os?: string;
   client?: string;
   client_version?: string;
   interfaces?: NetInterface[];

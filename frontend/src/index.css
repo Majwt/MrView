@@ -122,7 +122,7 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply bg-background text-foreground;
+    @apply m-0 bg-background text-foreground;
     background-image:
       radial-gradient(1200px 600px at 90% -20%, color-mix(in oklab, var(--chart-1) 18%, transparent), transparent 62%),
       radial-gradient(900px 420px at -10% 120%, color-mix(in oklab, var(--chart-2) 15%, transparent), transparent 65%),

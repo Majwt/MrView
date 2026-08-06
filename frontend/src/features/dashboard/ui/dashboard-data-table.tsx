@@ -200,7 +200,7 @@ export function DataTable({ data }: { data: NodeRow[] }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6">
+      <div className="relative flex flex-col gap-4 overflow-auto">
         <div className="overflow-hidden rounded-lg border">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-muted">

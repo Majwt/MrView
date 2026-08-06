@@ -17,7 +17,7 @@ export default function AppShellLayout() {
       >
         <AppSidebar />
 
-        <SidebarInset className="aurora-bg h-svh overflow-hidden">
+        <SidebarInset className="aurora-bg h-svh min-h-0 overflow-hidden md:peer-data-[variant=inset]:m-0">
           <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b border-border/70 bg-background/70 backdrop-blur-xl transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
             <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
               <SidebarTrigger className="-ms-1" />
@@ -37,7 +37,7 @@ export default function AppShellLayout() {
             </div>
           </header>
 
-          <main className="flex flex-1 flex-col overflow-hidden">
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <Outlet />
           </main>
         </SidebarInset>

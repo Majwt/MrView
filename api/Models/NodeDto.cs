@@ -6,6 +6,7 @@ public sealed record NodeDto(
     long Id,
     string Fqdn,
     string Hostname,
+    string Os,
     string Client,
     string ClientVersion,
     IEnumerable<NetInterface> Interfaces,

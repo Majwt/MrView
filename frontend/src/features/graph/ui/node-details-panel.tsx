@@ -17,7 +17,7 @@ export default function NodeDetailsPanel({
   const hasDates = !!node.last_seen;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 gap-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
@@ -89,6 +89,20 @@ export default function NodeDetailsPanel({
           </div>
         ) : null}
       </div>
+
+      {/* Operating System */}
+      {node.os && node.os !== "Unknown" ? (
+        <div>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            OS
+          </h3>
+          <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
+            <div className="grid items-center gap-x-4 gap-y-1" style={{ gridTemplateColumns: "auto 1fr" }}>
+              <Row label="Version" value={node.os} />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Client */}
       {(node.client && node.client !== "Unknown") || (node.client_version && node.client_version !== "Unknown") ? (

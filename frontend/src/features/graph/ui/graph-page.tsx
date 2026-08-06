@@ -438,7 +438,7 @@ export default function GraphPage() {
   }, [filters, SERVER_SIDE_FIELDS]);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
           <div className="relative flex-1 min-h-0 overflow-hidden">
             <div className="absolute inset-0">
@@ -572,8 +572,8 @@ export default function GraphPage() {
             </div>
             {showAside && (
               <aside
-                style={{ width: asideWidth }}
-                className="absolute top-0 right-0 bottom-0 border-l overflow-y-auto bg-background z-10"
+                style={{ width: asideWidth, bottom: showTable ? tableHeight : 0 }}
+                className="absolute top-0 right-0 bottom-0 z-20 flex min-h-0 flex-col overflow-hidden border-l bg-background"
               >
                 {/* drag handle on the left edge */}
                 <div
@@ -592,7 +592,7 @@ export default function GraphPage() {
               </aside>
             )}
 
-          {showTable && <section className="absolute left-0 right-0 bottom-0 flex flex-col overflow-hidden border-t bg-background z-10" style={{ height: tableHeight }}>
+          {showTable && <section className="absolute left-0 right-0 bottom-0 z-10 flex flex-col overflow-hidden border-t bg-background" style={{ height: tableHeight }}>
             {/* drag handle on the top edge */}
             <div
               className="absolute inset-x-0 top-0 h-1 cursor-row-resize hover:bg-primary/40 active:bg-primary/60 z-10"
