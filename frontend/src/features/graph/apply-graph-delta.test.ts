@@ -7,7 +7,7 @@ function makeNode(fqdn: string, hostname: string): GraphNode {
     id: fqdn,
     fqdn,
     hostname,
-    interfaces: [{ adapter: "eth0", ip: "10.0.0.1", mac: "aa", subnet: "255.255.255.0" }],
+    interfaces: [{ adapter: "eth0", ipv4: "10.0.0.1", subnetv4: "255.255.255.0", ipv6: null, subnetv6: null, mac: "aa" }],
     distinct_edge: 1,
     connection_count: 1,
     x: 0,

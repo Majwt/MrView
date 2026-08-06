@@ -37,7 +37,8 @@ export function buildFilterSuggestions(snapshot: GraphSnapshot | null): FilterSu
     }
 
     for (const netInterface of node.interfaces ?? []) {
-      add("ip", netInterface.ip);
+      if (netInterface.ipv4) add("ip", netInterface.ipv4);
+      if (netInterface.ipv6) add("ip", netInterface.ipv6);
       add("mac", netInterface.mac);
     }
   }

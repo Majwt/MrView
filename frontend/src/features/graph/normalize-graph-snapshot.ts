@@ -146,7 +146,7 @@ function addMissingEndpoint(
   placeholder.lastSeen = maxDateString(placeholder.lastSeen, edge.last_seen);
 
   if (ip && !placeholder.interfacesByIp.has(ip)) {
-    placeholder.interfacesByIp.set(ip, { adapter: "Unknown", ip, mac: "", subnet: "" });
+    placeholder.interfacesByIp.set(ip, { adapter: "Unknown", ipv4: ip, subnetv4: null, ipv6: null, subnetv6: null, mac: "" });
   }
 }
 

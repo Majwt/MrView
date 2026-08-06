@@ -9,9 +9,11 @@ export type Customer = {
 
 export type NetInterface = {
   adapter: string;
-  ip: string;
+  ipv4: string | null;
+  subnetv4: string | null;
+  ipv6: string | null;
+  subnetv6: string | null;
   mac: string;
-  subnet: string;
   status?: string;
 };
 export type GraphNode = d3.SimulationNodeDatum & {
@@ -19,6 +21,8 @@ export type GraphNode = d3.SimulationNodeDatum & {
   fqdn: string;
   hostname: string;
   ciid?: string;
+  client?: string;
+  client_version?: string;
   interfaces?: NetInterface[];
   distinct_edge: number;
   connection_count: number;
