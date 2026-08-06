@@ -98,6 +98,8 @@ public class GraphService
             n.Id,
             n.Fqdn,
             n.Hostname,
+            n.Client,
+            n.ClientVersion,
             n.Interfaces,
             n.DistinctEdge,
             n.ConnectionCount,

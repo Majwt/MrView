@@ -598,40 +598,8 @@ public class GraphReadRepository : IGraphReadRepository
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        var sql = $"""
-            WITH iface_json AS (
-                SELECT
-                    ni.ciid,
-                    interfaces_json = (
-                        SELECT
-                            adapter = COALESCE(NULLIF(ni2.adapter, ''), NULLIF(ni2.description, ''), 'Unknown'),
-                            ip = ip_rows.ip,
-                            mac = ni2.mac_address,
-                            subnet = ip_rows.subnet,
-                            status = COALESCE(NULLIF(ni2.last_status, ''), 'unknown')
-                        FROM {_interfacesTable} ni2
-                        CROSS APPLY (
-                            SELECT
-                                ip = ni2.address_ipv4,
-                                subnet = COALESCE(ni2.netmask_ipv4, '')
-                            WHERE ni2.address_ipv4 IS NOT NULL
-                              AND ni2.address_ipv4 <> ''
-
-                            UNION ALL
-
-                            SELECT
-                                ip = ni2.address_ipv6,
-                                subnet = COALESCE(ni2.netmask_ipv6, '')
-                            WHERE ni2.address_ipv6 IS NOT NULL
-                              AND ni2.address_ipv6 <> ''
-                        ) ip_rows
-                        WHERE ni2.ciid = ni.ciid
-                        FOR JSON PATH
-                    )
-                FROM {_interfacesTable} ni
-                GROUP BY ni.ciid
-            ),
-            edge_agg AS (
+        var nodeSql = $"""
+            WITH edge_agg AS (
                 SELECT
                     node_ciid,
                     edge_count = COUNT_BIG(*),
@@ -657,24 +625,49 @@ public class GraphReadRepository : IGraphReadRepository
                 n.fqdn,
                 n.group_id,
                 n.group_name,
+                n.os_version,
+                client = n.client_name,
+                n.client_version,
                 n.first_seen,
                 n.last_seen,
-                interfaces_json = COALESCE(i.interfaces_json, '[]'),
                 edge_count = COALESCE(ea.edge_count, 0),
                 connection_count = COALESCE(ea.connection_count, 0)
             FROM {_nodesTable} n
-            LEFT JOIN iface_json i
-                ON i.ciid = n.ciid
             LEFT JOIN edge_agg ea
                 ON ea.node_ciid = n.ciid
             WHERE n.ciid = @Ciid;
             """;
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Ciid", ciid);
-        command.Parameters.AddWithValue("@SeenCountThreshold", _seenCountThreshold);
-        await using var reader = await command.ExecuteReaderAsync();
-        return (await ParseNodesFromReader(reader)).FirstOrDefault();
+        NodeEntity? node;
+        await using (var nodeCmd = new SqlCommand(nodeSql, connection))
+        {
+            nodeCmd.Parameters.AddWithValue("@Ciid", ciid);
+            nodeCmd.Parameters.AddWithValue("@SeenCountThreshold", _seenCountThreshold);
+            await using var nodeReader = await nodeCmd.ExecuteReaderAsync();
+            node = (await ParseNodesFromReader(nodeReader)).FirstOrDefault();
+        }
+
+        if (node is null) return null;
+
+        var ifaceSql = $"""
+            SELECT
+                adapter = COALESCE(NULLIF(ni.adapter, ''), NULLIF(ni.description, ''), 'Unknown'),
+                ipv4 = NULLIF(ni.address_ipv4, ''),
+                subnetv4 = NULLIF(ni.netmask_ipv4, ''),
+                ipv6 = NULLIF(ni.address_ipv6, ''),
+                subnetv6 = NULLIF(ni.netmask_ipv6, ''),
+                mac = COALESCE(ni.mac_address, ''),
+                status = COALESCE(NULLIF(ni.last_status, ''), 'unknown')
+            FROM {_interfacesTable} ni
+            WHERE ni.ciid = @Ciid;
+            """;
+
+        await using (var ifaceCmd = new SqlCommand(ifaceSql, connection))
+        {
+            ifaceCmd.Parameters.AddWithValue("@Ciid", ciid);
+            await using var ifaceReader = await ifaceCmd.ExecuteReaderAsync();
+            return node with { Interfaces = await ParseInterfacesFromReader(ifaceReader) };
+        }
     }
 
     public async Task<IEnumerable<string>> filterNodeCiidsAsync(
@@ -838,6 +831,34 @@ public class GraphReadRepository : IGraphReadRepository
         return nodes;
     }
 
+    private static async Task<List<NetInterface>> ParseInterfacesFromReader(SqlDataReader reader)
+    {
+        var interfaces = new List<NetInterface>();
+
+        var adapterOrdinal = reader.GetOrdinal("adapter");
+        var ipv4Ordinal = reader.GetOrdinal("ipv4");
+        var subnetv4Ordinal = reader.GetOrdinal("subnetv4");
+        var ipv6Ordinal = reader.GetOrdinal("ipv6");
+        var subnetv6Ordinal = reader.GetOrdinal("subnetv6");
+        var macOrdinal = reader.GetOrdinal("mac");
+        var statusOrdinal = reader.GetOrdinal("status");
+
+        while (await reader.ReadAsync())
+        {
+            interfaces.Add(new NetInterface(
+                adapter: reader.GetString(adapterOrdinal),
+                ipv4: reader.IsDBNull(ipv4Ordinal) ? null : reader.GetString(ipv4Ordinal),
+                subnetv4: reader.IsDBNull(subnetv4Ordinal) ? null : reader.GetString(subnetv4Ordinal),
+                ipv6: reader.IsDBNull(ipv6Ordinal) ? null : reader.GetString(ipv6Ordinal),
+                subnetv6: reader.IsDBNull(subnetv6Ordinal) ? null : reader.GetString(subnetv6Ordinal),
+                mac: reader.GetString(macOrdinal),
+                status: reader.IsDBNull(statusOrdinal) ? null : reader.GetString(statusOrdinal)
+            ));
+        }
+
+        return interfaces;
+    }
+
     private async Task<IEnumerable<NodeEntity>> ParseNodesFromReader(SqlDataReader reader)
     {
         var nodes = new List<NodeEntity>();
@@ -847,7 +868,9 @@ public class GraphReadRepository : IGraphReadRepository
         var fqdnOrdinal = reader.GetOrdinal("fqdn");
         var groupIdOrdinal = reader.GetOrdinal("group_id");
         var groupNameOrdinal = reader.GetOrdinal("group_name");
-        var interfacesJsonOrdinal = reader.GetOrdinal("interfaces_json");
+        var osOrdinal = reader.GetOrdinal("os_version");
+        var clientOrdinal = reader.GetOrdinal("client");
+        var clientVersionOrdinal = reader.GetOrdinal("client_version");
         var edgeCountOrdinal = reader.GetOrdinal("edge_count");
         var connectionCountOrdinal = reader.GetOrdinal("connection_count");
         var firstSeenOrdinal = reader.GetOrdinal("first_seen");
@@ -864,8 +887,9 @@ public class GraphReadRepository : IGraphReadRepository
                 ? "Unknown"
                 : reader.GetString(groupNameOrdinal);
 
-            var interfacesJson = reader.GetString(interfacesJsonOrdinal);
-            var interfaces = System.Text.Json.JsonSerializer.Deserialize<List<NetInterface>>(interfacesJson) ?? [];
+            var os = reader.IsDBNull(osOrdinal) ? "Unknown" : reader.GetString(osOrdinal);
+            var client = reader.IsDBNull(clientOrdinal) ? "Unknown" : reader.GetString(clientOrdinal);
+            var clientVersion = reader.IsDBNull(clientVersionOrdinal) ? "Unknown" : reader.GetString(clientVersionOrdinal);
 
             var edgeCount = reader.GetInt64(edgeCountOrdinal);
             var connectionCount = reader.GetInt64(connectionCountOrdinal);
@@ -879,7 +903,10 @@ public class GraphReadRepository : IGraphReadRepository
                     Id: id,
                     Fqdn: fqdn,
                     Hostname: HostnameFromFqdn(fqdn),
-                    Interfaces: interfaces,
+                    Os: os,
+                    Client: client,
+                    ClientVersion: clientVersion,
+                    Interfaces: [],
                     DistinctEdge: edgeCount,
                     ConnectionCount: connectionCount,
                     Customer: customer,

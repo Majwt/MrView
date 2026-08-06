@@ -57,7 +57,7 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
 
     [HttpGet("api/customer/{customerId}/graph")]
     [Authorize(Policy = "AdminOnly")]
-    public async Task<GraphResponse> GetCustomerGraph(
+    public async Task<IResult> GetCustomerGraph(
         int customerId,
         [FromQuery] string? lastSeen,
         [FromQuery] long? lastEdgeId,
@@ -94,7 +94,7 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
             lastEdgeId ?? 0,
             lastNodeId ?? 0);
 
-        return await graphService.GetGraphAsync(cursor, customerId, queryParams);
+        return Results.Ok(await graphService.GetGraphAsync(cursor, customerId, queryParams));
     }
 
     [HttpGet("api/node")]
