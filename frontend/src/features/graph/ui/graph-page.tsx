@@ -11,12 +11,12 @@ import { normalizeGraphSnapshot } from "@/features/graph/normalize-graph-snapsho
 import type { GraphEdge, GraphNode, GraphSnapshot } from "@/features/graph/types";
 import { X, PanelRight, PanelBottom } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
+import NodeDetailsPanel from "@/components/node-details-panel";
 import FilterBar from "./filter-bar";
 import GraphQuickFilters, { type QuickFilters } from "./graph-quick-filters";
 import GraphView from "./graph-view";
-import NodeDetailsPanel from "./node-details-panel";
+import { DataTable } from "@/components/data-table";
 import { createConnectionColumns, type TableConnection } from "./table/connection-columns";
-import { DataTable } from "./table/data-table";
 
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";

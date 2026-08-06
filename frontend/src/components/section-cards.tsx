@@ -15,7 +15,7 @@ import {
   Network,
   Sparkles,
 } from "lucide-react"
-import type { DashboardStats } from "@/api/dashboard-api"
+import type { DashboardStats } from "@/features/dashboard/api/dashboard-api"
 
 function fmt(value: number | undefined, loading: boolean): string {
   if (loading || value === undefined) return "—"

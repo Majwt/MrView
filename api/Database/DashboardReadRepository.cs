@@ -257,6 +257,9 @@ public class DashboardReadRepository : IDashboardReadRepository
                              END,
                 distinct_edges   = COALESCE(ea.edge_count, 0),
                 connection_count = COALESCE(ea.connection_count, 0),
+                n.os_version,
+                n.client_name,
+                n.client_version,
                 n.first_seen,
                 n.last_seen,
                 group_name = COALESCE(n.group_name, '')
@@ -281,6 +284,9 @@ public class DashboardReadRepository : IDashboardReadRepository
         var ciidOrdinal = reader.GetOrdinal("ciid");
         var fqdnOrdinal = reader.GetOrdinal("fqdn");
         var hostnameOrdinal = reader.GetOrdinal("hostname");
+        var os_VersionOrdinal = reader.GetOrdinal("os_version");
+        var clientNameOrdinal = reader.GetOrdinal("client_name");
+        var clientVersionOrdinal = reader.GetOrdinal("client_version");
         var edgesOrdinal = reader.GetOrdinal("distinct_edges");
         var connectionOrdinal = reader.GetOrdinal("connection_count");
         var firstSeenOrdinal = reader.GetOrdinal("first_seen");
@@ -292,6 +298,9 @@ public class DashboardReadRepository : IDashboardReadRepository
             rows.Add(new NodeRow(
                 Ciid: reader.GetString(ciidOrdinal),
                 Fqdn: reader.GetString(fqdnOrdinal),
+                Os: reader.GetString(os_VersionOrdinal),
+                Client: reader.GetString(clientNameOrdinal),
+                ClientVersion: reader.GetString(clientVersionOrdinal),
                 Hostname: reader.GetString(hostnameOrdinal),
                 DistinctEdges: reader.GetInt64(edgesOrdinal),
                 ConnectionCount: reader.GetInt64(connectionOrdinal),
