@@ -603,6 +603,7 @@ export default function GraphPage() {
               columns={connectionColumns}
               data={tableConnections}
               loading={isLoadingEdges}
+              initialColumnVisibility={{ sourceIp: false, targetIp: false }}
               getRowHoverId={(row) => row.id}
               hoveredRowIds={hoveredConnectionIds}
               onRowHoverChange={setHoveredConnectionId}

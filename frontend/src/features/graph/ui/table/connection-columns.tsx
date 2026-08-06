@@ -2,6 +2,7 @@ import type { ColumnDef, SortingFn } from "@tanstack/react-table";
 
 import {
   HostCell,
+  MonoIdCell,
   NumericCell,
   ProcessCell,
   RichDateCell,
@@ -50,11 +51,11 @@ export function createConnectionColumns(
       />
     ),
   },
-  // {
-  //   accessorKey: "sourceIp",
-  //   header: "Local IP",
-  //   cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
-  // },
+  {
+    accessorKey: "sourceIp",
+    header: "Local IP",
+    cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
+  },
   {
     accessorKey: "sourcePort",
     header: "Src Port",
@@ -91,11 +92,11 @@ export function createConnectionColumns(
       />
     ),
   },
-  // {
-  //   accessorKey: "targetIp",
-  //   header: "Peer IP",
-  //   cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
-  // },
+  {
+    accessorKey: "targetIp",
+    header: "Peer IP",
+    cell: ({ getValue }) => <MonoIdCell value={String(getValue() ?? "")} />,
+  },
   {
     accessorKey: "targetPort",
     header: "Dst Port",

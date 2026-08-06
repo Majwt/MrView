@@ -32,6 +32,7 @@ type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   loading?: boolean;
+  initialColumnVisibility?: VisibilityState;
   globalFilter?: string;
   onGlobalFilterChange?: (value: string) => void;
   toolbar?: React.ReactNode;
@@ -45,6 +46,7 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   loading,
+  initialColumnVisibility,
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
   toolbar,
@@ -54,7 +56,9 @@ export function DataTable<TData, TValue>({
   onRowHoverChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+    () => initialColumnVisibility ?? {},
+  );
   const [uncontrolledGlobalFilter, setUncontrolledGlobalFilter] = useState("");
   const globalFilter = controlledGlobalFilter ?? uncontrolledGlobalFilter;
   const setGlobalFilter = setControlledGlobalFilter ?? setUncontrolledGlobalFilter;
