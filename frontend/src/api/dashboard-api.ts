@@ -4,7 +4,7 @@ export type DashboardStats = {
   total_edges: number;
   active_nodes: number;
   total_seen_count: number;
-  new_edges_last_7_days: number;
+  new_edges_last7_days: number;
 };
 
 export type ConnectionHistoryPoint = {
