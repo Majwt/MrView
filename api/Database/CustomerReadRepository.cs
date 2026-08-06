@@ -51,4 +51,35 @@ public class CustomerReadRepository : ICustomerReadRepository
 
         return customers.ToArray();
     }
+
+    public async Task<Customer?> GetCustomerByIdAsync(int customerId)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(
+            $"""
+            SELECT TOP (1)
+                group_id,
+                group_name
+            FROM {_nodesTable}
+            WHERE group_id = @customerId;
+            """,
+            connection);
+        command.Parameters.AddWithValue("@customerId", customerId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+        var groupId = reader.GetInt32(reader.GetOrdinal("group_id"));
+        var groupNameOrdinal = reader.GetOrdinal("group_name");
+        var groupName = reader.IsDBNull(groupNameOrdinal)
+            ? $"Group {groupId}"
+            : reader.GetString(groupNameOrdinal);
+
+        return new Customer(Name: groupName, CmdbCiId: string.Empty, Id: groupId);
+    }
 }

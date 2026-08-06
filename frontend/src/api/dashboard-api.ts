@@ -24,14 +24,28 @@ export type NodeRow = {
   group_name: string;
 };
 
-export function fetchDashboardStats(): Promise<DashboardStats> {
-  return apiGet<DashboardStats>("/dashboard/stats");
+function dashboardPath(path: string, customerId: number | null): string {
+  return customerId == null
+    ? `/dashboard/${path}`
+    : `/customer/${customerId}/dashboard/${path}`;
 }
 
-export function fetchConnectionsHistory(days: number): Promise<ConnectionHistoryPoint[]> {
-  return apiGet<ConnectionHistoryPoint[]>(`/dashboard/connections-history?days=${days}`);
+export function fetchDashboardStats(customerId: number | null = null): Promise<DashboardStats> {
+  return apiGet<DashboardStats>(dashboardPath("stats", customerId));
 }
 
-export function fetchDashboardNodes(limit = 100): Promise<NodeRow[]> {
-  return apiGet<NodeRow[]>(`/dashboard/nodes?limit=${limit}`);
+export function fetchConnectionsHistory(
+  days: number,
+  customerId: number | null = null,
+): Promise<ConnectionHistoryPoint[]> {
+  return apiGet<ConnectionHistoryPoint[]>(
+    `${dashboardPath("connections-history", customerId)}?days=${days}`,
+  );
+}
+
+export function fetchDashboardNodes(
+  limit = 100,
+  customerId: number | null = null,
+): Promise<NodeRow[]> {
+  return apiGet<NodeRow[]>(`${dashboardPath("nodes", customerId)}?limit=${limit}`);
 }

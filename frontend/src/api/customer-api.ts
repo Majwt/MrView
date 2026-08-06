@@ -5,3 +5,7 @@ export function fetchAllCustomers(): Promise<Customer[]> {
   return apiGet<Customer[]>("/customers");
 }
 
+export function fetchCurrentCustomer(): Promise<Customer> {
+  return apiGet<Customer>("/customers/me");
+}
+

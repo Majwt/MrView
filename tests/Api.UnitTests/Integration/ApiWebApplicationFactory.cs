@@ -99,6 +99,10 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                     claims.Add(new Claim(ClaimTypes.Role, "Customer"));
                     claims.Add(new Claim("customer_id", "7"));
                     break;
+                case "customer-999":
+                    claims.Add(new Claim(ClaimTypes.Role, "Customer"));
+                    claims.Add(new Claim("customer_id", "999"));
+                    break;
                 case "customer-no-id":
                     claims.Add(new Claim(ClaimTypes.Role, "Customer"));
                     break;
@@ -181,6 +185,9 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 Id: 30,
                 Fqdn: "node-a.local",
                 Hostname: "node-a",
+                Os: "Linux",
+                Client: "MrBig",
+                ClientVersion: "1.0",
                 Interfaces: Array.Empty<NetInterface>(),
                 DistinctEdge: 1,
                 ConnectionCount: 2,
@@ -231,12 +238,17 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
     private sealed class FakeCustomerReadRepository : ICustomerReadRepository
     {
+        private static readonly Customer[] Customers =
+        {
+            new("Axians", "cmdb-1", 7),
+            new("Contoso", "cmdb-2", 8),
+        };
+
         public Task<Customer[]> getAllCustomersAsync()
-            => Task.FromResult(new[]
-            {
-                new Customer("Axians", "cmdb-1", 7),
-                new Customer("Contoso", "cmdb-2", 8),
-            });
+            => Task.FromResult(Customers);
+
+        public Task<Customer?> GetCustomerByIdAsync(int customerId)
+            => Task.FromResult(Customers.SingleOrDefault(customer => customer.Id == customerId));
     }
 
     private sealed class FakeAuthSessionRepository : IAuthSessionRepository

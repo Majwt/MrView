@@ -19,5 +19,9 @@ public class CustomerService
         return customers.Select(c => new Customer(c.Name, c.CmdbCiId, c.Id)).ToArray();
     }
 
+    public Task<Customer?> GetCustomerByIdAsync(int customerId)
+    {
+        return _customerReadRepository.GetCustomerByIdAsync(customerId);
+    }
 
 }

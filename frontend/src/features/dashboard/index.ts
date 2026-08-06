@@ -1,2 +1,2 @@
 export { DashboardShell } from "./ui/dashboard-shell";
-export { dashboardIndexRoute, dashboardRoute } from "./routes";
+export { customerDashboardAdminRoute, dashboardIndexRoute, dashboardRoute } from "./routes";

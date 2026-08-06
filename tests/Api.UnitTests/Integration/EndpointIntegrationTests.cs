@@ -81,6 +81,95 @@ public sealed class EndpointIntegrationTests : IClassFixture<ApiWebApplicationFa
     }
 
     [Fact]
+    public async Task CustomerDashboardStats_WithAdminToken_ReturnsScopedStats()
+    {
+        using var client = CreateHttpsClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", "admin");
+
+        var response = await client.GetAsync("/api/customer/7/dashboard/stats");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("\"total_edges\":7", body);
+    }
+
+    [Fact]
+    public async Task CustomerDashboardStats_WithCustomerToken_ReturnsForbidden()
+    {
+        using var client = CreateHttpsClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", "customer-7");
+
+        var response = await client.GetAsync("/api/customer/7/dashboard/stats");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CustomerDashboardStats_WithoutToken_ReturnsUnauthorized()
+    {
+        using var client = CreateHttpsClient();
+
+        var response = await client.GetAsync("/api/customer/7/dashboard/stats");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CurrentCustomer_WithCustomerToken_ReturnsOwnCustomer()
+    {
+        using var client = CreateHttpsClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", "customer-7");
+
+        var response = await client.GetAsync("/api/customers/me");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("\"name\":\"Axians\"", body);
+        Assert.Contains("\"id\":7", body);
+        Assert.DoesNotContain("Contoso", body);
+    }
+
+    [Theory]
+    [InlineData("admin")]
+    [InlineData("customer-no-id")]
+    public async Task CurrentCustomer_WithoutCustomerClaim_ReturnsForbidden(string token)
+    {
+        using var client = CreateHttpsClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/api/customers/me");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CurrentCustomer_WithUnknownCustomerClaim_ReturnsNotFound()
+    {
+        using var client = CreateHttpsClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", "customer-999");
+
+        var response = await client.GetAsync("/api/customers/me");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Customers_WithCustomerToken_ReturnsForbidden()
+    {
+        using var client = CreateHttpsClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", "customer-7");
+
+        var response = await client.GetAsync("/api/customers");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task AuthRefresh_WithoutCookie_ReturnsUnauthorized()
     {
         using var client = CreateHttpsClient();

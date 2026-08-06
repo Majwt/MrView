@@ -1,2 +1,2 @@
 export { GraphShell } from "./ui/graph-shell";
-export { customerGraphAdminRoute, graphRoute } from "./routes";
+export { customerGraphAdminRoute, graphRoute, legacyCustomerGraphAdminRoute } from "./routes";

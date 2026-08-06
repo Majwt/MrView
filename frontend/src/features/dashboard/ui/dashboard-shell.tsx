@@ -4,10 +4,18 @@ import { SectionCards } from "@/components/section-cards";
 import { useGraphStats } from "@/features/graph/graph-stats-context";
 import { useDashboardData } from "@/features/dashboard/hooks/use-dashboard-data";
 import { Activity, Clock3 } from "lucide-react";
+import { Navigate, useParams } from "react-router";
 
 export function DashboardShell() {
+  const { customerId: customerIdParam } = useParams();
+  const customerId = customerIdParam == null ? null : Number(customerIdParam);
+  const isValidCustomerId = customerId == null || (Number.isInteger(customerId) && customerId > 0);
   const { lastConnectionUtc } = useGraphStats();
-  const { stats, chartData, nodes, loading } = useDashboardData();
+  const { stats, chartData, nodes, loading } = useDashboardData(customerId, isValidCustomerId);
+
+  if (!isValidCustomerId) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const lastSeenText = lastConnectionUtc
     ? new Date(lastConnectionUtc).toLocaleString("en-GB", {

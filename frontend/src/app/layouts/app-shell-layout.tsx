@@ -23,6 +23,14 @@ export default function AppShellLayout() {
               <SidebarTrigger className="-ms-1" />
               <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
 
+              <div className="flex min-w-0 items-center gap-2">
+                <img src="/favicon.svg" alt="" className="size-8 rounded-md" />
+                <div className="min-w-0 leading-tight">
+                  <div className="truncate font-heading text-sm font-semibold">AxiLANswer</div>
+                  <div className="hidden truncate text-xs text-muted-foreground sm:block">Network topology</div>
+                </div>
+              </div>
+
               <div className="ml-auto flex items-center gap-2">
                 <ThemeToggle />
               </div>

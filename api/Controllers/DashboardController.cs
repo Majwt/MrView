@@ -10,6 +10,48 @@ namespace Api.Controllers;
 [Authorize]
 public class DashboardController : ControllerBase
 {
+    [HttpGet("/api/customer/{customerId:int}/dashboard/stats")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerStats(
+        int customerId,
+        [FromServices] DashboardService dashboardService)
+    {
+        return Results.Ok(await dashboardService.GetStatsAsync(customerId));
+    }
+
+    [HttpGet("/api/customer/{customerId:int}/dashboard/connections-history")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerConnectionsHistory(
+        int customerId,
+        [FromQuery] int? days,
+        [FromServices] DashboardService dashboardService)
+    {
+        var effectiveDays = days is > 0 ? days.Value : 90;
+        return Results.Ok(await dashboardService.GetConnectionsHistoryAsync(effectiveDays, customerId));
+    }
+
+    [HttpGet("/api/customer/{customerId:int}/dashboard/top-connections")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerTopConnections(
+        int customerId,
+        [FromQuery] int? limit,
+        [FromServices] DashboardService dashboardService)
+    {
+        var effectiveLimit = limit is > 0 ? limit.Value : 100;
+        return Results.Ok(await dashboardService.GetTopConnectionsAsync(effectiveLimit, customerId));
+    }
+
+    [HttpGet("/api/customer/{customerId:int}/dashboard/nodes")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerNodes(
+        int customerId,
+        [FromQuery] int? limit,
+        [FromServices] DashboardService dashboardService)
+    {
+        var effectiveLimit = limit is > 0 ? limit.Value : 100;
+        return Results.Ok(await dashboardService.GetDashboardNodesAsync(effectiveLimit, customerId));
+    }
+
     [HttpGet("stats")]
     public async Task<IResult> GetStats(
         [FromServices] DashboardService dashboardService)
