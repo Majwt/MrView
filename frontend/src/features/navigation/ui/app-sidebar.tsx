@@ -30,7 +30,7 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>AxiLANswer</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -54,6 +54,24 @@ export function AppSidebar() {
                   <NavLink to={graphPath}>
                     <Network />
                     <span>Graph</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup className="">
+          <SidebarGroupLabel>Other</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === "/settings"}
+                  className="data-[active=true]:bg-primary/12 data-[active=true]:text-primary"
+                >
+                  <NavLink to="/settings">
+                    <span>Settings</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>

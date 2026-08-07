@@ -1,10 +1,19 @@
 import { apiGet } from "@/api/client";
 
-export type DashboardStats = {
-  total_edges: number;
-  active_nodes: number;
-  total_seen_count: number;
-  new_edges_last7_days: number;
+export type DashboardMetric = {
+  name: string;
+  value: number;
+  description_header: string;
+  description_body: string;
+  previous_value: number | null;
+  percentage_change: number | null;
+};
+
+export type DashboardMetrics = {
+  distinct_edges: DashboardMetric;
+  active_nodes: DashboardMetric;
+  total_events: DashboardMetric;
+  new_connections: DashboardMetric;
 };
 
 export type ConnectionHistoryPoint = {
@@ -33,8 +42,46 @@ function dashboardPath(path: string, customerId: number | null): string {
     : `/customer/${customerId}/dashboard/${path}`;
 }
 
-export function fetchDashboardStats(customerId: number | null = null): Promise<DashboardStats> {
-  return apiGet<DashboardStats>(dashboardPath("stats", customerId));
+export function fetchDistinctEdgesMetric(
+  lastDays: number,
+  customerId: number | null = null,
+): Promise<DashboardMetric> {
+  return apiGet<DashboardMetric>(`${dashboardPath("distinct-edges", customerId)}?lastDays=${lastDays}`);
+}
+
+export function fetchActiveNodesMetric(
+  lastDays: number,
+  customerId: number | null = null,
+): Promise<DashboardMetric> {
+  return apiGet<DashboardMetric>(`${dashboardPath("active-nodes", customerId)}?lastDays=${lastDays}`);
+}
+
+export function fetchTotalEventsMetric(
+  lastDays: number,
+  customerId: number | null = null,
+): Promise<DashboardMetric> {
+  return apiGet<DashboardMetric>(`${dashboardPath("total-events", customerId)}?lastDays=${lastDays}`);
+}
+
+export function fetchNewConnectionsMetric(
+  lastDays: number,
+  customerId: number | null = null,
+): Promise<DashboardMetric> {
+  return apiGet<DashboardMetric>(`${dashboardPath("new-connections", customerId)}?lastDays=${lastDays}`);
+}
+
+export async function fetchDashboardMetrics(
+  lastDays: number,
+  customerId: number | null = null,
+): Promise<DashboardMetrics> {
+  const [distinct_edges, active_nodes, total_events, new_connections] = await Promise.all([
+    fetchDistinctEdgesMetric(lastDays, customerId),
+    fetchActiveNodesMetric(lastDays, customerId),
+    fetchTotalEventsMetric(lastDays, customerId),
+    fetchNewConnectionsMetric(lastDays, customerId),
+  ]);
+
+  return { distinct_edges, active_nodes, total_events, new_connections };
 }
 
 export function fetchConnectionsHistory(

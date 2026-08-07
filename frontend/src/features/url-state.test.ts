@@ -13,7 +13,7 @@ describe("readUrlState", () => {
       quickFilters: {
         hideIsolatedNodes: true,
         staleThresholdHours: 30 * 24,
-        managedOnly: false,
+        managedOnly: true,
       },
     });
   });

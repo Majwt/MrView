@@ -49,7 +49,7 @@ export function readUrlState(): UrlState {
     tableView: view === "connections" ? "connections" : "nodes",
     quickFilters: {
       hideIsolatedNodes: hideIsolatedParam === null ? true : hideIsolatedParam === "1",
-      managedOnly: managedOnlyParam === "1",
+      managedOnly: managedOnlyParam === null ? true : managedOnlyParam === "1",
       staleThresholdHours,
     },
   };
@@ -82,8 +82,8 @@ export function writeUrlState(state: UrlState) {
     params.set("qi", "0");
   }
 
-  if (state.quickFilters.managedOnly) {
-    params.set("qm", "1");
+  if (!state.quickFilters.managedOnly) {
+    params.set("qm", "0");
   }
 
   if (state.quickFilters.staleThresholdHours === null) {
@@ -108,7 +108,7 @@ function getDefaultUrlState(): UrlState {
     tableView: "nodes",
     quickFilters: {
       hideIsolatedNodes: true,
-      managedOnly: false,
+      managedOnly: true,
       staleThresholdHours: 30 * 24,
     },
   };

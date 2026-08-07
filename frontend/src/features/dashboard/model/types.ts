@@ -1,5 +1,6 @@
 export type {
   ConnectionHistoryPoint,
-  DashboardStats,
+  DashboardMetrics,
+  DashboardMetric,
   NodeRow,
 } from "../api/dashboard-api";

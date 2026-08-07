@@ -9,6 +9,18 @@ public class DashboardService
     {
         _dashboardReadRepository = dashboardReadRepository;
     }
+    public Task<DashboardMetric> GetDistinctEdgesAsync(int lastDays, int customerId = -1)
+        => _dashboardReadRepository.GetDistinctEdgesAsync(lastDays, customerId);
+
+    public Task<DashboardMetric> GetActiveNodesAsync(int lastDays, int customerId = -1)
+        => _dashboardReadRepository.GetActiveNodesAsync(lastDays, customerId);
+
+    public Task<DashboardMetric> GetTotalEventsAsync(int lastDays, int customerId = -1)
+        => _dashboardReadRepository.GetTotalEventsAsync(lastDays, customerId);
+
+    public Task<DashboardMetric> GetNewConnectionsAsync(int lastDays, int customerId = -1)
+        => _dashboardReadRepository.GetNewConnectionsAsync(lastDays, customerId);
+
 
     public Task<DashboardStats> GetStatsAsync(int customerId = -1)
         => _dashboardReadRepository.GetDashboardStatsAsync(customerId);

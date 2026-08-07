@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   type ColumnDef,
   type FilterFn,
+  type SortingFn,
 } from "@tanstack/react-table"
 import { z } from "zod"
 
@@ -32,20 +33,12 @@ export const schema = z.object({
   group_name: z.string(),
 })
 
-const nodeRowFilter: FilterFn<NodeRow> = (row, _colId, filterValue) => {
-  const q = String(filterValue ?? "").toLowerCase()
-  if (!q) return true
-  const { fqdn, hostname, group_name } = row.original
-  return [fqdn, hostname, group_name].some((v) => (v ?? "").toLowerCase().includes(q))
-}
-
 const columns: ColumnDef<NodeRow>[] = [
   {
     accessorKey: "fqdn",
     header: "FQDN",
     cell: ({ row }) => <TableCellViewer item={row.original} />,
     enableHiding: false,
-    filterFn: nodeRowFilter,
   },
   {
     accessorKey: "os",
@@ -61,7 +54,19 @@ const columns: ColumnDef<NodeRow>[] = [
       row.original.client === "unknown" ? (
         <span className="font-mono text-sm text-muted-foreground">-</span>
       ) : (
-        <span className="font-mono text-sm">{row.original.client} {row.original.client_version}</span>
+        <span className="font-mono text-sm">{row.original.client}</span>
+      )
+    ),
+  },
+  {
+    accessorKey: "client_version",
+    header: "Version",
+    sortingFn: semverSortingFn,
+    cell: ({ row }) => (
+      row.original.client.toLowerCase() === "unknown" ? (
+        <span className="font-mono text-sm text-muted-foreground">-</span>
+      ) : (
+        <span className="font-mono text-sm">{row.original.client_version}</span>
       )
     ),
   },
@@ -115,12 +120,124 @@ const columns: ColumnDef<NodeRow>[] = [
   },
 ]
 
+type ParsedSemver = {
+  main: number[]
+  pre: Array<number | string> | null
+}
+
+function parseSemver(value: string | null | undefined): ParsedSemver | null {
+  if (!value) return null
+
+  const trimmed = value.trim().toLowerCase()
+  if (!trimmed || trimmed === "unknown" || trimmed === "-") return null
+
+  const normalized = trimmed.startsWith("v") ? trimmed.slice(1) : trimmed
+  const [mainPart, prePart] = normalized.split("-", 2)
+  const mainTokens = mainPart.split(".")
+
+  if (!mainTokens.every((token) => /^\d+$/.test(token))) {
+    return null
+  }
+
+  const main = mainTokens.map((token) => Number(token))
+  const pre = prePart
+    ? prePart
+      .split(".")
+      .map((token) => (/^\d+$/.test(token) ? Number(token) : token))
+    : null
+
+  return { main, pre }
+}
+
+function compareSemver(a: ParsedSemver, b: ParsedSemver): number {
+  const maxLength = Math.max(a.main.length, b.main.length)
+  for (let i = 0; i < maxLength; i += 1) {
+    const av = a.main[i] ?? 0
+    const bv = b.main[i] ?? 0
+    if (av !== bv) return av - bv
+  }
+
+  if (a.pre === null && b.pre === null) return 0
+  if (a.pre === null) return 1
+  if (b.pre === null) return -1
+
+  const maxPreLength = Math.max(a.pre.length, b.pre.length)
+  for (let i = 0; i < maxPreLength; i += 1) {
+    const av = a.pre[i]
+    const bv = b.pre[i]
+
+    if (av === undefined) return -1
+    if (bv === undefined) return 1
+
+    const avIsNumber = typeof av === "number"
+    const bvIsNumber = typeof bv === "number"
+
+    if (avIsNumber && bvIsNumber && av !== bv) {
+      return av - bv
+    }
+    if (avIsNumber !== bvIsNumber) {
+      return avIsNumber ? -1 : 1
+    }
+    if (av !== bv) {
+      return String(av).localeCompare(String(bv))
+    }
+  }
+
+  return 0
+}
+
+function semverSortingFn(rowA: Parameters<SortingFn<NodeRow>>[0], rowB: Parameters<SortingFn<NodeRow>>[1], columnId: Parameters<SortingFn<NodeRow>>[2]) {
+  const rawA = String(rowA.getValue(columnId) ?? "")
+  const rawB = String(rowB.getValue(columnId) ?? "")
+
+  const parsedA = parseSemver(rawA)
+  const parsedB = parseSemver(rawB)
+
+  if (parsedA && parsedB) {
+    return compareSemver(parsedA, parsedB)
+  }
+
+  if (parsedA) return 1
+  if (parsedB) return -1
+
+  return rawA.localeCompare(rawB, undefined, { numeric: true, sensitivity: "base" })
+}
+
+const nodeGlobalFilter: FilterFn<NodeRow> = (row, _columnId, filterValue) => {
+  const q = String(filterValue ?? "").trim().toLowerCase()
+  if (!q) return true
+
+  const item = row.original
+  const firstSeen = new Date(item.first_seen)
+  const lastSeen = new Date(item.last_seen)
+  const firstSeenLabel = Number.isNaN(firstSeen.getTime())
+    ? ""
+    : firstSeen.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  const lastSeenLabel = Number.isNaN(lastSeen.getTime())
+    ? ""
+    : lastSeen.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+
+  const searchText = [
+    item.fqdn,
+    item.os,
+    item.client,
+    item.client_version,
+    item.group_name,
+    String(item.distinct_edges),
+    item.distinct_edges.toLocaleString(),
+    String(item.connection_count),
+    item.connection_count.toLocaleString(),
+    item.first_seen,
+    item.last_seen,
+    firstSeenLabel,
+    lastSeenLabel,
+  ].join(" ").toLowerCase()
+
+  return searchText.includes(q)
+}
+
 export function DataTable({ data }: { data: NodeRow[] }) {
   const [globalFilter, setGlobalFilter] = React.useState("")
-  const columnFilters = React.useMemo(
-    () => [{ id: "fqdn", value: globalFilter }],
-    [globalFilter],
-  )
 
   return (
     <SharedDataTable
@@ -128,7 +245,7 @@ export function DataTable({ data }: { data: NodeRow[] }) {
       data={data}
       globalFilter={globalFilter}
       onGlobalFilterChange={setGlobalFilter}
-      columnFilters={columnFilters}
+      globalFilterFn={nodeGlobalFilter}
       toolbar={
         <Input
           placeholder="Search nodes…"

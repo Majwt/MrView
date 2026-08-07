@@ -8,6 +8,7 @@ import {
   useReactTable,
   type ColumnFiltersState,
   type ColumnDef,
+  type FilterFn,
   type PaginationState,
   type SortingState,
   type VisibilityState,
@@ -43,6 +44,7 @@ type DataTableProps<TData, TValue> = {
   emptyMessage?: string;
   globalFilter?: string;
   onGlobalFilterChange?: (value: string) => void;
+  globalFilterFn?: FilterFn<TData>;
   columnFilters?: ColumnFiltersState;
   toolbar?: React.ReactNode;
   getRowId?: (originalRow: TData, index: number, parent?: { id: string }) => string;
@@ -65,6 +67,7 @@ export function DataTable<TData, TValue>({
   emptyMessage = "No results.",
   globalFilter: controlledGlobalFilter,
   onGlobalFilterChange: setControlledGlobalFilter,
+  globalFilterFn,
   columnFilters,
   toolbar,
   getRowId,
@@ -97,6 +100,7 @@ export function DataTable<TData, TValue>({
       ...(enablePagination ? { pagination } : {}),
     },
     getRowId,
+    globalFilterFn,
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
@@ -154,7 +158,7 @@ export function DataTable<TData, TValue>({
 
       <div className="min-h-0 flex-1 overflow-auto rounded-md border">
         <table className="w-full caption-bottom text-sm">
-          <TableHeader className="sticky top-0 z-10 bg-background">
+          <TableHeader className="sticky top-0 z-10 backdrop-blur-xl bg-background/70">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
@@ -164,7 +168,7 @@ export function DataTable<TData, TValue>({
                   <TableHead
                     key={header.id}
                     className={cn(
-                      "cursor-pointer select-none overflow-hidden text-ellipsis bg-background",
+                      "cursor-pointer select-none overflow-hidden text-ellipsis [background-color:var(--muted)]/50 text-left font-medium",
                       header.column.id === "protocol" && "w-16",
                       isPortColumn(header.column.id) && "w-24",
                       isCountColumn(header.column.id) && "w-24",

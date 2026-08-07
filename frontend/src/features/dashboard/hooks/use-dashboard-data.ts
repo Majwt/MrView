@@ -1,18 +1,20 @@
 import {
+  fetchDashboardMetrics,
   fetchConnectionsHistory,
   fetchDashboardNodes,
-  fetchDashboardStats,
   type ConnectionHistoryPoint,
-  type DashboardStats,
+  type DashboardMetrics,
   type NodeRow,
 } from "@/features/dashboard/api/dashboard-api";
 import { useEffect, useMemo, useState } from "react";
 
 export function useDashboardData(customerId: number | null, enabled = true) {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<DashboardMetrics | null>(null);
   const [history, setHistory] = useState<ConnectionHistoryPoint[]>([]);
   const [nodes, setNodes] = useState<NodeRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const metricWindowDays = 7;
 
   useEffect(() => {
     if (!enabled) return;
@@ -22,7 +24,7 @@ export function useDashboardData(customerId: number | null, enabled = true) {
       .then(() => {
         if (!cancelled) setLoading(true);
         return Promise.all([
-          fetchDashboardStats(customerId),
+          fetchDashboardMetrics(metricWindowDays, customerId),
           fetchConnectionsHistory(90, customerId),
           fetchDashboardNodes(100, customerId),
         ]);

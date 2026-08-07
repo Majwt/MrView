@@ -8,7 +8,7 @@ import { useGraphLayoutState } from "@/features/graph/page/use-graph-layout-stat
 import { useGraphRendererPreference } from "@/features/graph/page/use-graph-renderer-preference";
 import { useGraphUrlSync, useInitialGraphUrlState } from "@/features/graph/page/use-graph-url-sync";
 import { normalizeGraphSnapshot } from "@/features/graph/normalize-graph-snapshot";
-import type { GraphEdge, GraphNode, GraphSnapshot } from "@/features/graph/types";
+import type { GraphNode, GraphSnapshot } from "@/features/graph/types";
 import { X, PanelRight, PanelBottom } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
 import NodeDetailsPanel from "@/components/node-details-panel";
@@ -37,7 +37,6 @@ export default function GraphPage() {
   const [snapshot, setSnapshot] = useState<GraphSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [fullEdges, setFullEdges] = useState<GraphEdge[] | null>(null);
   const [isLoadingEdges, setIsLoadingEdges] = useState(true);
   const [selectedNodeFqdn, setSelectedNodeFqdn] = useState<string | null>(
     initialUrlState.selectedNodeFqdn,
@@ -143,33 +142,10 @@ export default function GraphPage() {
   }, [hoveredNodeBase, hoveredNodeDetails]);
 
   const tableConnections: TableConnection[] = useMemo(() => {
-    if (!fullEdges) return [];
+    let edges = graphSnapshot?.edges ?? [];
 
-    const allowedFqdns = serverFilteredCiids !== null
-      ? new Set(
-          (snapshot?.nodes ?? [])
-            .filter((n) => n.is_placeholder || (n.ciid && serverFilteredCiids.has(n.ciid)))
-            .map((n) => n.fqdn),
-        )
-      : null;
-
-    const q = globalSearch.trim().toLowerCase();
-    let edges = fullEdges;
-
-    if (allowedFqdns) {
-      edges = edges.filter((e) => allowedFqdns.has(e.source_fqdn) && allowedFqdns.has(e.target_fqdn));
-    }
     if (selectedNodeFqdn) {
       edges = edges.filter((e) => e.source_fqdn === selectedNodeFqdn || e.target_fqdn === selectedNodeFqdn);
-    }
-    if (q) {
-      edges = edges.filter((e) =>
-        [e.source_fqdn, e.target_fqdn, e.source_ip, e.target_ip,
-         String(e.source_port), String(e.target_port),
-         e.source_process_name, e.target_process_name,
-         e.service_name, String(e.seen_count),
-        ].some((v) => String(v ?? "").toLowerCase().includes(q)),
-      );
     }
 
     return edges.map((edge) => ({
@@ -188,7 +164,7 @@ export default function GraphPage() {
       firstSeen: edge.first_seen,
       lastSeen: edge.last_seen,
     }));
-  }, [fullEdges, serverFilteredCiids, selectedNodeFqdn, globalSearch, snapshot?.nodes]);
+  }, [graphSnapshot?.edges, selectedNodeFqdn]);
 
   const connectionColumns = useMemo(
     () => createConnectionColumns((fqdn) => setSelectedNodeFqdn(fqdn)),
@@ -225,7 +201,6 @@ export default function GraphPage() {
         });
         setSnapshot(snap);
         if (snap.cursor?.last_seen) setLastConnectionUtc(snap.cursor.last_seen);
-        setFullEdges(data.upsert_edges);
       } catch (error) {
         setError(error instanceof Error ? error.message : "Failed to load graph");
       } finally {
@@ -235,7 +210,6 @@ export default function GraphPage() {
     }
 
     setSnapshot(null);
-    setFullEdges(null);
     loadGraph();
   }, [customerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -274,7 +248,6 @@ export default function GraphPage() {
           });
         });
 
-        setFullEdges(data.upsert_edges);
       } catch (error) {
         console.error("Failed to apply filter change", error);
       }

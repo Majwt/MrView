@@ -19,6 +19,49 @@ public class DashboardController : ControllerBase
         return Results.Ok(await dashboardService.GetStatsAsync(customerId));
     }
 
+    [HttpGet("/api/customer/{customerId:int}/dashboard/distinct-edges")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerSumConnections(
+        [FromQuery]int lastDays,
+        int customerId,
+        [FromServices] DashboardService dashboardService)
+    {
+        return Results.Ok(await dashboardService.GetDistinctEdgesAsync(lastDays, customerId));
+    }
+
+    [HttpGet("/api/customer/{customerId:int}/dashboard/active-nodes")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerActiveNodes(
+        [FromQuery]int lastDays,
+        int customerId,
+        [FromServices] DashboardService dashboardService)
+    {
+        return Results.Ok(await dashboardService.GetActiveNodesAsync(lastDays, customerId));
+
+    }
+    [HttpGet("/api/customer/{customerId:int}/dashboard/total-events")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerTotalEvents(
+        [FromQuery]int lastDays,
+        int customerId,
+        [FromServices] DashboardService dashboardService)
+    {
+        return Results.Ok(await dashboardService.GetTotalEventsAsync(lastDays, customerId));
+    }
+    [HttpGet("/api/customer/{customerId:int}/dashboard/new-connections")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerNewConnections(
+        [FromQuery]int lastDays,
+        int customerId,
+        [FromServices] DashboardService dashboardService)
+    {
+        return Results.Ok(await dashboardService.GetNewConnectionsAsync(lastDays, customerId));
+    }
+
+
+
+
+
     [HttpGet("/api/customer/{customerId:int}/dashboard/connections-history")]
     [Authorize(Policy = "AdminOnly")]
     public async Task<IResult> GetCustomerConnectionsHistory(
@@ -68,6 +111,82 @@ public class DashboardController : ControllerBase
         }
 
         return Results.Ok(await dashboardService.GetStatsAsync(customerId));
+    }
+
+    [HttpGet("distinct-edges")]
+    public async Task<IResult> GetDistinctEdges(
+        [FromQuery]int lastDays,
+        [FromServices] DashboardService dashboardService)
+    {
+        if (User.IsInRole("Admin"))
+        {
+            return Results.Ok(await dashboardService.GetDistinctEdgesAsync(lastDays));
+        }
+
+        var customerIdClaim = Jwt.CustomerIdClaim(User);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+        {
+            return Results.Forbid();
+        }
+
+        return Results.Ok(await dashboardService.GetDistinctEdgesAsync(lastDays, customerId));
+    }
+
+    [HttpGet("active-nodes")]
+    public async Task<IResult> GetActiveNodes(
+        [FromQuery]int lastDays,
+        [FromServices] DashboardService dashboardService)
+    {
+        if (User.IsInRole("Admin"))
+        {
+            return Results.Ok(await dashboardService.GetActiveNodesAsync(lastDays));
+        }
+
+        var customerIdClaim = Jwt.CustomerIdClaim(User);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+        {
+            return Results.Forbid();
+        }
+
+        return Results.Ok(await dashboardService.GetActiveNodesAsync(lastDays, customerId));
+    }
+    [HttpGet("total-events")]
+    public async Task<IResult> GetTotalEvents(
+        [FromQuery]int lastDays,
+        [FromServices] DashboardService dashboardService)
+    {
+
+        if (User.IsInRole("Admin"))
+        {
+            return Results.Ok(await dashboardService.GetTotalEventsAsync(lastDays));
+        }
+
+        var customerIdClaim = Jwt.CustomerIdClaim(User);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+        {
+            return Results.Forbid();
+        }
+
+        return Results.Ok(await dashboardService.GetTotalEventsAsync(lastDays, customerId));
+    }
+    [HttpGet("new-connections")]
+    public async Task<IResult> GetNewConnections(
+        [FromQuery]int lastDays,
+        [FromServices] DashboardService dashboardService)
+    {
+
+        if (User.IsInRole("Admin"))
+        {
+            return Results.Ok(await dashboardService.GetNewConnectionsAsync(lastDays));
+        }
+
+        var customerIdClaim = Jwt.CustomerIdClaim(User);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+        {
+            return Results.Forbid();
+        }
+
+        return Results.Ok(await dashboardService.GetNewConnectionsAsync(lastDays, customerId));
     }
 
     [HttpGet("connections-history")]

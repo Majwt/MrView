@@ -1,4 +1,5 @@
 using Api.Models;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 
@@ -7,14 +8,16 @@ namespace Api.Database;
 public class DashboardReadRepository : IDashboardReadRepository
 {
     private readonly string _connectionString;
+    private readonly ILogger<DashboardReadRepository> _logger;
     private readonly TableIdentifier _nodesTable;
     private readonly TableIdentifier _edgesTable;
     private readonly TableIdentifier _edgeStatsView;
     private readonly TableIdentifier _portsTable;
     private readonly int _seenCountThreshold;
 
-    public DashboardReadRepository(IConfiguration configuration, IOptions<DatabaseOptions> options)
+    public DashboardReadRepository(IConfiguration configuration, IOptions<DatabaseOptions> options, ILogger<DashboardReadRepository> logger)
     {
+        _logger = logger;
         _connectionString = configuration.GetConnectionString(Config.CONNECTION_STRING_NAME)
             ?? throw new InvalidOperationException("Missing connection string.");
 
@@ -35,6 +38,207 @@ public class DashboardReadRepository : IDashboardReadRepository
             _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
         };
     }
+
+    private static (long currentValue, long excludingLastNDaysValue, double? percentageChange) ExtractDashboardMetricValue(SqlDataReader reader, string currentValueColumn, string excludingLastNDaysColumn)
+    {
+        var currentValue = reader.GetInt64(reader.GetOrdinal(currentValueColumn));
+        var excludingLastNDaysValue = reader.GetInt64(reader.GetOrdinal(excludingLastNDaysColumn));
+        double? percentageChange = null;
+        if (excludingLastNDaysValue > 0)
+        {
+            percentageChange = (double)(currentValue - excludingLastNDaysValue) / excludingLastNDaysValue * 100d;
+        }
+        else if (currentValue > 0)
+        {
+            percentageChange = 100d;
+        }
+
+        return (currentValue, excludingLastNDaysValue, percentageChange);
+    }
+    public async Task<DashboardMetric> GetDistinctEdgesAsync(int lastDays, int customerId = -1)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string sql;
+        if (customerId == -1)
+        {
+            sql = $"""
+                SELECT
+                    current_value = COUNT_BIG(*),
+                    excluding_last_n_days_value = COUNT_BIG(CASE WHEN e.first_seen < DATEADD(DAY, -@LastDays, GETUTCDATE()) THEN 1 END)
+                FROM {_edgeStatsView} e;
+                """;
+        }
+        else
+        {
+            sql = $"""
+                WITH customer_edges AS (
+                    SELECT e.first_seen
+                    FROM {_edgeStatsView} e
+                    LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
+                    LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
+                    WHERE na.group_id = @CustomerId OR nb.group_id = @CustomerId
+                )
+                SELECT
+                    current_value = COUNT_BIG(*),
+                    excluding_last_n_days_value = COUNT_BIG(CASE WHEN first_seen < DATEADD(DAY, -@LastDays, GETUTCDATE()) THEN 1 END)
+                FROM customer_edges;
+                """;
+        }
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@LastDays", lastDays);
+        if (customerId != -1)
+        {
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        var (currentValue, excludingLastNDaysValue, percentageChange) = ExtractDashboardMetricValue(reader, "current_value", "excluding_last_n_days_value");
+
+        return new DashboardMetric(
+            Name: "Distinct Connections",
+            Value: currentValue,
+            DescriptionHeader: "Unique source to destination paths",
+            DescriptionBody: "Deduplicated edges",
+            PreviousValue: excludingLastNDaysValue,
+            PercentageChange: percentageChange
+        );
+
+    }
+
+    public async Task<DashboardMetric> GetTotalEventsAsync(int lastDays, int customerId = -1)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var customerJoin = customerId != -1
+            ? $"LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid"
+            : "";
+        var customerFilter = customerId != -1
+            ? "AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)"
+            : "";
+
+        var sql = $"""
+            SELECT
+                current_value = COUNT_BIG(*),
+                excluding_last_n_days_value = COUNT_BIG(CASE WHEN e.observed_date < CAST(DATEADD(DAY, -@LastDays, GETUTCDATE()) AS date) THEN 1 END)
+            FROM {_edgesTable} e
+            {customerJoin}
+            WHERE 1=1 {customerFilter};
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@LastDays", lastDays);
+        if (customerId != -1)
+        {
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        var (currentValue, excludingLastNDaysValue, percentageChange) = ExtractDashboardMetricValue(reader, "current_value", "excluding_last_n_days_value");
+
+        return new DashboardMetric(
+            Name: "Total events",
+            Value: currentValue,
+            DescriptionHeader: "Cumulative traffic reports",
+            DescriptionBody: "Across all active edges",
+            PreviousValue: excludingLastNDaysValue,
+            PercentageChange: percentageChange
+        );
+    }
+
+    public async Task<DashboardMetric> GetActiveNodesAsync(int lastDays, int customerId = -1)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var customerFilter = customerId != -1
+            ? "AND n.group_id = @CustomerId"
+            : "";
+
+        var sql = $"""
+            SELECT
+                current_value = COUNT_BIG(CASE WHEN n.last_seen >= DATEADD(DAY, -@LastDays, GETUTCDATE()) THEN 1 END),
+                excluding_last_n_days_value = COUNT_BIG(CASE WHEN n.last_seen >= DATEADD(DAY, -(@LastDays * 2), GETUTCDATE())
+                                                            AND n.last_seen < DATEADD(DAY, -@LastDays, GETUTCDATE())
+                                                        THEN 1 END)
+            FROM {_nodesTable} n
+            WHERE 1=1 {customerFilter};
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@LastDays", lastDays);
+        if (customerId != -1)
+        {
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        var (currentValue, excludingLastNDaysValue, percentageChange) = ExtractDashboardMetricValue(reader, "current_value", "excluding_last_n_days_value");
+
+        return new DashboardMetric(
+            Name: "Active nodes",
+            Value: currentValue,
+            DescriptionHeader: "Monitored endpoints",
+            DescriptionBody: $"Seen in the last {lastDays} days",
+            PreviousValue: excludingLastNDaysValue,
+            PercentageChange: percentageChange
+        );
+    }
+
+    public async Task<DashboardMetric> GetNewConnectionsAsync(int lastDays, int customerId = -1)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var customerJoin = customerId != -1
+            ? $"LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid"
+            : "";
+        var customerFilter = customerId != -1
+            ? "AND (na.group_id = @CustomerId OR nb.group_id = @CustomerId)"
+            : "";
+
+        var sql = $"""
+            SELECT
+                current_value = COUNT_BIG(CASE WHEN e.observed_date >= CAST(DATEADD(DAY, -@LastDays, GETUTCDATE()) AS date) THEN 1 END),
+                excluding_last_n_days_value = COUNT_BIG(CASE WHEN e.observed_date >= CAST(DATEADD(DAY, -(@LastDays * 2), GETUTCDATE()) AS date)
+                                                            AND e.observed_date < CAST(DATEADD(DAY, -@LastDays, GETUTCDATE()) AS date)
+                                                        THEN 1 END)
+            FROM {_edgesTable} e
+            {customerJoin}
+            WHERE 1=1 {customerFilter};
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@LastDays", lastDays);
+        if (customerId != -1)
+        {
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        var (currentValue, excludingLastNDaysValue, percentageChange) = ExtractDashboardMetricValue(reader, "current_value", "excluding_last_n_days_value");
+
+        return new DashboardMetric(
+            Name: lastDays == 7 ? "New This Week" : "New Connections",
+            Value: currentValue,
+            DescriptionHeader: $"First observed in the last {lastDays} days",
+            DescriptionBody: $"Emerging connections",
+            PreviousValue: excludingLastNDaysValue,
+            PercentageChange: percentageChange
+        );
+    }
+
 
     public async Task<DashboardStats> GetDashboardStatsAsync(int customerId = -1)
     {
