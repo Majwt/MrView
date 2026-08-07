@@ -22,15 +22,110 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useParams } from "react-router";
 import { useGraphStats } from "@/features/graph/graph-stats-context";
+import type { GraphCursor } from "@/features/graph/types";
 
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
+const GRAPH_CURSOR_STORAGE_KEY_PREFIX = "graph.cursor";
+const GRAPH_SNAPSHOT_STORAGE_KEY_PREFIX = "graph.snapshot";
+const GRAPH_SNAPSHOT_MAX_AGE_MS = 5 * 60 * 1000;
+
+function getGraphCursorStorageKey(customerId: string | undefined): string {
+  return customerId ? `${GRAPH_CURSOR_STORAGE_KEY_PREFIX}:customer:${customerId}` : `${GRAPH_CURSOR_STORAGE_KEY_PREFIX}:global`;
+}
+
+function getGraphSnapshotStorageKey(customerId: string | undefined): string {
+  return customerId ? `${GRAPH_SNAPSHOT_STORAGE_KEY_PREFIX}:customer:${customerId}` : `${GRAPH_SNAPSHOT_STORAGE_KEY_PREFIX}:global`;
+}
+
+function readStoredGraphCursor(storageKey: string): GraphCursor | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<GraphCursor>;
+    if (
+      typeof parsed.last_seen === "string"
+      && typeof parsed.last_seen_edge_id === "number"
+      && typeof parsed.last_seen_node_id === "number"
+    ) {
+      return {
+        last_seen: parsed.last_seen,
+        last_seen_edge_id: parsed.last_seen_edge_id,
+        last_seen_node_id: parsed.last_seen_node_id,
+      };
+    }
+  } catch {
+    // Ignore malformed/unavailable localStorage.
+  }
+
+  return null;
+}
+
+function writeStoredGraphCursor(storageKey: string, cursor: GraphCursor): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(cursor));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+type StoredGraphSnapshot = {
+  saved_at: number;
+  snapshot: GraphSnapshot;
+};
+
+function readStoredGraphSnapshot(storageKey: string): GraphSnapshot | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<StoredGraphSnapshot>;
+    if (!parsed.snapshot || typeof parsed.saved_at !== "number") {
+      return null;
+    }
+
+    if (Date.now() - parsed.saved_at > GRAPH_SNAPSHOT_MAX_AGE_MS) {
+      return null;
+    }
+
+    if (!Array.isArray(parsed.snapshot.nodes) || !Array.isArray(parsed.snapshot.edges) || !parsed.snapshot.cursor) {
+      return null;
+    }
+
+    return parsed.snapshot;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredGraphSnapshot(storageKey: string, snapshot: GraphSnapshot): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    const payload: StoredGraphSnapshot = {
+      saved_at: Date.now(),
+      snapshot,
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+  } catch {
+    // Ignore storage size/quota issues.
+  }
+}
 
 
 export default function GraphPage() {
 
   const { customerId } = useParams();
   const { setLastConnectionUtc } = useGraphStats();
+  const cursorStorageKey = useMemo(() => getGraphCursorStorageKey(customerId), [customerId]);
+  const snapshotStorageKey = useMemo(() => getGraphSnapshotStorageKey(customerId), [customerId]);
 
 
   const initialUrlState = useInitialGraphUrlState();
@@ -180,10 +275,35 @@ export default function GraphPage() {
   }
 
   useEffect(() => {
+    const storedCursor = readStoredGraphCursor(cursorStorageKey);
+    if (storedCursor?.last_seen) {
+      setLastConnectionUtc(storedCursor.last_seen);
+    }
+  }, [cursorStorageKey, setLastConnectionUtc]);
+
+  useEffect(() => {
+    if (!snapshot?.cursor) return;
+    writeStoredGraphCursor(cursorStorageKey, snapshot.cursor);
+  }, [cursorStorageKey, snapshot?.cursor]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    writeStoredGraphSnapshot(snapshotStorageKey, snapshot);
+  }, [snapshotStorageKey, snapshot]);
+
+  useEffect(() => {
     async function loadGraph() {
+      const cachedSnapshot = readStoredGraphSnapshot(snapshotStorageKey);
+      if (cachedSnapshot) {
+        setSnapshot(cachedSnapshot);
+        if (cachedSnapshot.cursor?.last_seen) {
+          setLastConnectionUtc(cachedSnapshot.cursor.last_seen);
+        }
+      }
+
       try {
-        setIsLoading(true);
-        setIsLoadingEdges(true);
+        setIsLoading(!cachedSnapshot);
+        setIsLoadingEdges(!cachedSnapshot);
         setError(null);
 
         const qf = quickFiltersRef.current;
@@ -209,9 +329,8 @@ export default function GraphPage() {
       }
     }
 
-    setSnapshot(null);
     loadGraph();
-  }, [customerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [customerId, snapshotStorageKey, setLastConnectionUtc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When quick filters change after the initial load, apply as a delta (preserves node positions)
   useEffect(() => {

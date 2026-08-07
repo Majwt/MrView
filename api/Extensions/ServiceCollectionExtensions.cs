@@ -57,6 +57,7 @@ public static class ServiceCollectionExtensions
         services.AddResponseCompression(options => { options.EnableForHttps = true; });
         services.AddHealthChecks();
         services.AddHttpClient();
+        services.AddMemoryCache();
         services.AddEndpointsApiExplorer();
 
         return services;
