@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -15,16 +15,17 @@
     <FileVersion>0.1.0.0</FileVersion>
 
     <!-- Windows file properties -->
-    <Title>AxiLANswerApi API</Title>
-    <Product>AxiLANswerApi</Product>
-    <Description>Backend API for AxiLANswerApi network visualization</Description>
+    <Title>AxiLANswer API</Title>
+    <Product>AxiLANswer</Product>
+    <Description>Backend API for AxiLANswer network visualization</Description>
     <Company>Axians</Company>
     <Authors>Theodor Wase and Walter Almgren</Authors>
 
+    <UserSecretsId>9a99dfb5-154a-4831-90c9-3b0059ac3893</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.7" />
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
   </ItemGroup>
 
 </Project>

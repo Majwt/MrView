@@ -1,0 +1,407 @@
+USE AxiNetStat;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.refresh_connection_edge
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    EXEC dbo.refresh_host_alias_map;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        ;WITH latest_node_raw AS (
+            SELECT
+                ciid = NULLIF(LTRIM(RTRIM(nr.ciid)), ''),
+                nr.ephemeral_port_start,
+                nr.ephemeral_port_end,
+                rn = ROW_NUMBER() OVER (
+                    PARTITION BY NULLIF(LTRIM(RTRIM(nr.ciid)), '')
+                    ORDER BY nr.DateAdded DESC, nr.id DESC
+                )
+            FROM dbo.node_raw nr
+        ),
+        node_ranges AS (
+            SELECT
+                ciid,
+                ephemeral_port_start = COALESCE(ephemeral_port_start, 49152),
+                ephemeral_port_end = COALESCE(ephemeral_port_end, 65535)
+            FROM latest_node_raw
+            WHERE rn = 1
+        ),
+        managed_lookup AS (
+            SELECT
+                ciid = NULLIF(LTRIM(RTRIM(ciid)), ''),
+                fqdn = LOWER(LTRIM(RTRIM(fqdn))),
+                short_name = LOWER(
+                    CASE
+                        WHEN CHARINDEX('.', LTRIM(RTRIM(fqdn))) > 0
+                        THEN LEFT(LTRIM(RTRIM(fqdn)), CHARINDEX('.', LTRIM(RTRIM(fqdn))) - 1)
+                        ELSE LTRIM(RTRIM(fqdn))
+                    END
+                )
+            FROM dbo.managed_node
+            WHERE NULLIF(LTRIM(RTRIM(fqdn)), '') IS NOT NULL
+        ),
+        interface_lookup AS (
+            SELECT
+                ciid = NULLIF(LTRIM(RTRIM(ni.ciid)), ''),
+                ni.address_ipv4,
+                rn = ROW_NUMBER() OVER (
+                    PARTITION BY ni.address_ipv4
+                    ORDER BY ni.last_seen DESC
+                )
+            FROM dbo.node_interface ni
+            WHERE ni.address_ipv4 IS NOT NULL
+              AND ni.address_ipv4 <> ''
+        ),
+        alias_lookup AS (
+            SELECT
+                alias_name = LOWER(alias_name),
+                canonical_fqdn = LOWER(canonical_fqdn)
+            FROM dbo.host_alias_map
+        ),
+        raw_base AS (
+            SELECT
+                r.id,
+                r.DateAdded,
+                direction = UPPER(LTRIM(RTRIM(ISNULL(r.direction, 'OUTGOING')))),
+                protocol = LOWER(LTRIM(RTRIM(ISNULL(r.protocol, 'tcp')))),
+
+                source_fqdn_raw = COALESCE(source_alias.canonical_fqdn, LOWER(COALESCE(source_match.fqdn, r.source_fqdn))),
+                r.source_address_ipv4,
+                source_ciid_raw = NULLIF(LTRIM(RTRIM(r.reporter_ciid)), ''),
+                reporter_ciid = NULLIF(LTRIM(RTRIM(r.reporter_ciid)), ''),
+                source_port_raw = r.source_port,
+
+                target_fqdn_raw = COALESCE(target_alias.canonical_fqdn, LOWER(r.target_fqdn)),
+                r.target_address_ipv4,
+                target_ciid_raw = CAST(NULL AS nvarchar(128)),
+                target_port_raw = r.target_port,
+
+                r.process_name,
+                r.process_id,
+
+                source_ephemeral_port_start_raw = COALESCE(source_range.ephemeral_port_start, 49152),
+                source_ephemeral_port_end_raw = COALESCE(source_range.ephemeral_port_end, 65535),
+                target_ephemeral_port_start_raw = 49152,
+                target_ephemeral_port_end_raw = 65535
+            FROM dbo.connection_raw r
+            LEFT JOIN node_ranges source_range
+                ON source_range.ciid = NULLIF(LTRIM(RTRIM(r.reporter_ciid)), '')
+            OUTER APPLY (
+                SELECT TOP (1)
+                    ni.fqdn
+                FROM dbo.node_interface ni
+                WHERE ni.ciid = NULLIF(LTRIM(RTRIM(r.reporter_ciid)), '')
+                                    AND ni.address_ipv4 = r.source_address_ipv4
+                ORDER BY
+                    ni.last_seen DESC
+            ) source_match
+            LEFT JOIN alias_lookup source_alias
+                ON source_alias.alias_name = LOWER(r.source_fqdn)
+            LEFT JOIN alias_lookup target_alias
+                ON target_alias.alias_name = LOWER(r.target_fqdn)
+        ),
+        normalized AS (
+            SELECT
+                b.id,
+                b.DateAdded,
+                b.protocol,
+                b.direction,
+                b.process_name,
+                b.process_id,
+                b.reporter_ciid,
+
+                -- raw rows are always source=client, target=server; no positional flip needed
+                source_fqdn = b.source_fqdn_raw,
+                source_ipv4 = b.source_address_ipv4,
+                -- OUTGOING: reporter is source (client); INCOMING: reporter is target (server)
+                source_ciid_base = CASE WHEN b.direction = 'INCOMING' THEN NULL               ELSE b.source_ciid_raw  END,
+                source_port = b.source_port_raw,
+
+                target_fqdn = b.target_fqdn_raw,
+                target_ipv4 = b.target_address_ipv4,
+                target_ciid_base = CASE WHEN b.direction = 'INCOMING' THEN b.reporter_ciid    ELSE b.target_ciid_raw  END,
+                target_port = b.target_port_raw,
+
+                -- INCOMING: we only know the server's ephemeral range, not the client's; use defaults for source
+                source_ephemeral_port_start = CASE WHEN b.direction = 'INCOMING' THEN 49152 ELSE b.source_ephemeral_port_start_raw END,
+                source_ephemeral_port_end   = CASE WHEN b.direction = 'INCOMING' THEN 65535 ELSE b.source_ephemeral_port_end_raw   END,
+                target_ephemeral_port_start = b.target_ephemeral_port_start_raw,
+                target_ephemeral_port_end   = b.target_ephemeral_port_end_raw
+            FROM raw_base b
+        ),
+        normalized_resolved AS (
+            SELECT
+                n.id,
+                n.DateAdded,
+                n.protocol,
+                source_fqdn = COALESCE(src_resolved_node.fqdn, n.source_fqdn),
+                n.source_ipv4,
+                source_ciid = resolved.source_ciid,
+                n.source_port,
+                target_fqdn = COALESCE(tgt_resolved_node.fqdn, n.target_fqdn),
+                n.target_ipv4,
+                target_ciid = resolved.target_ciid,
+                n.target_port,
+                n.source_ephemeral_port_start,
+                n.source_ephemeral_port_end,
+                n.target_ephemeral_port_start,
+                n.target_ephemeral_port_end,
+                endpoint_a_process_name =
+                    CASE
+                        WHEN resolved.source_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.target_ciid, '') <> n.reporter_ciid
+                        THEN n.process_name
+                        WHEN resolved.target_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.source_ciid, '') <> n.reporter_ciid
+                        THEN NULL
+                        WHEN n.direction = 'INCOMING' THEN NULL
+                        ELSE n.process_name
+                    END,
+                endpoint_a_process_id =
+                    CASE
+                        WHEN resolved.source_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.target_ciid, '') <> n.reporter_ciid
+                        THEN n.process_id
+                        WHEN resolved.target_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.source_ciid, '') <> n.reporter_ciid
+                        THEN NULL
+                        WHEN n.direction = 'INCOMING' THEN NULL
+                        ELSE n.process_id
+                    END,
+                endpoint_b_process_name =
+                    CASE
+                        WHEN resolved.target_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.source_ciid, '') <> n.reporter_ciid
+                        THEN n.process_name
+                        WHEN resolved.source_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.target_ciid, '') <> n.reporter_ciid
+                        THEN NULL
+                        WHEN n.direction = 'INCOMING' THEN n.process_name
+                        ELSE NULL
+                    END,
+                endpoint_b_process_id =
+                    CASE
+                        WHEN resolved.target_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.source_ciid, '') <> n.reporter_ciid
+                        THEN n.process_id
+                        WHEN resolved.source_ciid = n.reporter_ciid
+                         AND ISNULL(resolved.target_ciid, '') <> n.reporter_ciid
+                        THEN NULL
+                        WHEN n.direction = 'INCOMING' THEN n.process_id
+                        ELSE NULL
+                    END
+            FROM normalized n
+            OUTER APPLY (
+                SELECT TOP (1)
+                    ml.ciid,
+                    ml.fqdn
+                FROM managed_lookup ml
+                WHERE ml.fqdn = n.source_fqdn
+                   OR (ml.short_name = n.source_fqdn AND EXISTS (
+                       SELECT 1 FROM dbo.node_interface ni
+                       WHERE ni.ciid = ml.ciid AND ni.address_ipv4 = n.source_ipv4
+                   ))
+                ORDER BY
+                    CASE WHEN ml.fqdn = n.source_fqdn THEN 0 ELSE 1 END,
+                    CASE WHEN ml.fqdn LIKE '%.%' THEN 0 ELSE 1 END
+            ) src_node
+            OUTER APPLY (
+                SELECT TOP (1)
+                    ml.ciid,
+                    ml.fqdn
+                FROM managed_lookup ml
+                WHERE ml.fqdn = n.target_fqdn
+                   OR (ml.short_name = n.target_fqdn AND EXISTS (
+                       SELECT 1 FROM dbo.node_interface ni
+                       WHERE ni.ciid = ml.ciid AND ni.address_ipv4 = n.target_ipv4
+                   ))
+                ORDER BY
+                    CASE WHEN ml.fqdn = n.target_fqdn THEN 0 ELSE 1 END,
+                    CASE WHEN ml.fqdn LIKE '%.%' THEN 0 ELSE 1 END
+            ) tgt_node
+            LEFT JOIN interface_lookup src_iface
+                ON src_iface.address_ipv4 = n.source_ipv4
+               AND src_iface.rn = 1
+            LEFT JOIN interface_lookup tgt_iface
+                ON tgt_iface.address_ipv4 = n.target_ipv4
+               AND tgt_iface.rn = 1
+            OUTER APPLY (
+                SELECT
+                    source_ciid = COALESCE(
+                        src_node.ciid,
+                        CASE WHEN NULLIF(LTRIM(RTRIM(n.source_fqdn)), '') IS NULL THEN src_iface.ciid END,
+                        n.source_ciid_base
+                    ),
+                    target_ciid = COALESCE(
+                        tgt_node.ciid,
+                        CASE WHEN NULLIF(LTRIM(RTRIM(n.target_fqdn)), '') IS NULL THEN tgt_iface.ciid END,
+                        n.target_ciid_base
+                    )
+            ) resolved
+            LEFT JOIN managed_lookup src_resolved_node
+                ON src_resolved_node.ciid = resolved.source_ciid
+            LEFT JOIN managed_lookup tgt_resolved_node
+                ON tgt_resolved_node.ciid = resolved.target_ciid
+        ),
+        keyed AS (
+            SELECT
+                n.*,
+                source_is_ephemeral = CASE WHEN n.source_port BETWEEN n.source_ephemeral_port_start AND n.source_ephemeral_port_end THEN 1 ELSE 0 END,
+                target_is_ephemeral = CASE WHEN n.target_port BETWEEN n.target_ephemeral_port_start AND n.target_ephemeral_port_end THEN 1 ELSE 0 END,
+                service_port =
+                    CASE
+                        WHEN n.source_port IS NULL AND n.target_port IS NULL THEN NULL
+                        WHEN n.source_port IS NULL THEN n.target_port
+                        WHEN n.target_port IS NULL THEN n.source_port
+                        WHEN n.source_port BETWEEN n.source_ephemeral_port_start AND n.source_ephemeral_port_end
+                         AND n.target_port NOT BETWEEN n.target_ephemeral_port_start AND n.target_ephemeral_port_end
+                        THEN n.target_port
+                        WHEN n.target_port BETWEEN n.target_ephemeral_port_start AND n.target_ephemeral_port_end
+                         AND n.source_port NOT BETWEEN n.source_ephemeral_port_start AND n.source_ephemeral_port_end
+                        THEN n.source_port
+                        ELSE CASE WHEN n.source_port <= n.target_port THEN n.source_port ELSE n.target_port END
+                    END
+            FROM normalized_resolved n
+        ),
+        -- ensure endpoint_b is always the server: swap when source holds the service port
+        reoriented AS (
+            SELECT
+                source_fqdn             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.target_fqdn             ELSE k.source_fqdn             END,
+                source_ipv4             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.target_ipv4             ELSE k.source_ipv4             END,
+                source_ciid             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.target_ciid             ELSE k.source_ciid             END,
+                source_port             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.target_port             ELSE k.source_port             END,
+                endpoint_a_process_name = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.endpoint_b_process_name ELSE k.endpoint_a_process_name END,
+                endpoint_a_process_id   = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.endpoint_b_process_id   ELSE k.endpoint_a_process_id   END,
+                target_fqdn             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.source_fqdn             ELSE k.target_fqdn             END,
+                target_ipv4             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.source_ipv4             ELSE k.target_ipv4             END,
+                target_ciid             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.source_ciid             ELSE k.target_ciid             END,
+                target_port             = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.source_port             ELSE k.target_port             END,
+                endpoint_b_process_name = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.endpoint_a_process_name ELSE k.endpoint_b_process_name END,
+                endpoint_b_process_id   = CASE WHEN k.source_is_ephemeral = 0 AND k.target_is_ephemeral = 1 THEN k.endpoint_a_process_id   ELSE k.endpoint_b_process_id   END,
+                k.protocol,
+                k.service_port,
+                k.DateAdded,
+                k.id
+            FROM keyed k
+        ),
+        source_rows AS (
+            SELECT
+                r.source_fqdn,
+                r.source_ipv4,
+                r.source_port,
+                r.source_ciid,
+                r.endpoint_a_process_name,
+                r.endpoint_a_process_id,
+                r.target_fqdn,
+                r.target_ipv4,
+                r.target_port,
+                r.target_ciid,
+                r.endpoint_b_process_name,
+                r.endpoint_b_process_id,
+                r.protocol,
+                r.service_port,
+                service_name = COALESCE(ps.service_name, 'Unknown'),
+                confidence = CASE
+                    WHEN r.endpoint_a_process_name IS NOT NULL
+                     AND r.endpoint_b_process_name IS NOT NULL THEN 95
+                    WHEN r.endpoint_a_process_name IS NOT NULL
+                      OR r.endpoint_b_process_name IS NOT NULL THEN 40
+                    ELSE 10
+                END,
+                r.DateAdded
+            FROM reoriented r
+            OUTER APPLY (
+                SELECT TOP (1)
+                    p.service_name
+                FROM dbo.v_ports_effective p
+                WHERE p.port_number = r.service_port
+                  AND (p.protocol = r.protocol OR p.protocol = 'any')
+                ORDER BY
+                    CASE WHEN p.protocol = r.protocol THEN 0 ELSE 1 END,
+                    p.source_table DESC
+            ) ps
+        ),
+        -- merge same-edge same-day rows from both reporters so both process names land in one row
+        merged_rows AS (
+            SELECT
+                source_fqdn,
+                source_ipv4,
+                source_port             = MAX(source_port),
+                source_ciid             = MAX(source_ciid),
+                endpoint_a_process_name = MAX(endpoint_a_process_name),
+                endpoint_a_process_id   = MAX(endpoint_a_process_id),
+                target_fqdn,
+                target_ipv4,
+                target_port             = MAX(target_port),
+                target_ciid             = MAX(target_ciid),
+                endpoint_b_process_name = MAX(endpoint_b_process_name),
+                endpoint_b_process_id   = MAX(endpoint_b_process_id),
+                protocol,
+                service_port,
+                service_name            = MAX(service_name),
+                DateAdded               = MAX(DateAdded)
+            FROM source_rows
+            GROUP BY
+                source_fqdn, source_ipv4,
+                target_fqdn, target_ipv4,
+                protocol, service_port,
+                CAST(DateAdded AS date)
+        )
+        INSERT INTO dbo.connection_edge (
+            endpoint_a_fqdn,
+            endpoint_a_ipv4,
+            endpoint_a_port,
+            endpoint_a_ciid,
+            endpoint_a_process_name,
+            endpoint_a_process_id,
+            endpoint_b_fqdn,
+            endpoint_b_ipv4,
+            endpoint_b_port,
+            endpoint_b_ciid,
+            endpoint_b_process_name,
+            endpoint_b_process_id,
+            protocol,
+            service_port,
+            service_name,
+            confidence,
+            observed_at
+        )
+        SELECT
+            source_fqdn,
+            source_ipv4,
+            source_port,
+            source_ciid,
+            endpoint_a_process_name,
+            endpoint_a_process_id,
+            target_fqdn,
+            target_ipv4,
+            target_port,
+            target_ciid,
+            endpoint_b_process_name,
+            endpoint_b_process_id,
+            protocol,
+            service_port,
+            service_name,
+            confidence = CASE
+                WHEN endpoint_a_process_name IS NOT NULL AND endpoint_b_process_name IS NOT NULL THEN 95
+                WHEN endpoint_a_process_name IS NOT NULL OR  endpoint_b_process_name IS NOT NULL THEN 40
+                ELSE 10
+            END,
+            DateAdded
+        FROM merged_rows;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+
+        THROW;
+    END CATCH;
+END;
+GO

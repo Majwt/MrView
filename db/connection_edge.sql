@@ -1,0 +1,79 @@
+USE AxiNetStat;
+GO
+
+DROP TABLE IF EXISTS dbo.connection_edge;
+GO
+
+-- One row per (edge_key, observed_date): daily-deduplicated event log.
+-- v_connection_stats aggregates this into one row per edge for the API.
+CREATE TABLE dbo.connection_edge (
+    id bigint IDENTITY(1,1) NOT NULL,
+
+    endpoint_a_fqdn nvarchar(255) NOT NULL,
+    endpoint_a_ipv4 nvarchar(45) NOT NULL,
+    endpoint_a_port int NULL,
+    endpoint_a_ciid nvarchar(128) NULL,
+    endpoint_a_process_name nvarchar(260) NULL,
+    endpoint_a_process_id int NULL,
+
+    endpoint_b_fqdn nvarchar(255) NOT NULL,
+    endpoint_b_ipv4 nvarchar(45) NOT NULL,
+    endpoint_b_port int NULL,
+    endpoint_b_ciid nvarchar(128) NULL,
+    endpoint_b_process_name nvarchar(260) NULL,
+    endpoint_b_process_id int NULL,
+
+    protocol nvarchar(10) NOT NULL,
+    service_port int NULL,
+    service_name nvarchar(100) NOT NULL CONSTRAINT DF_connection_edge_service_name DEFAULT ('Unknown'),
+    confidence tinyint NOT NULL CONSTRAINT DF_connection_edge_confidence DEFAULT (0),
+
+    observed_at datetime2(0) NOT NULL,
+    observed_date AS CAST(observed_at AS date) PERSISTED,
+
+    edge_key AS
+        CONVERT(nvarchar(64), HASHBYTES(
+            'SHA2_256',
+            CONCAT(
+                LOWER(ISNULL(endpoint_a_fqdn, '')), '|',
+                ISNULL(endpoint_a_ipv4, ''), '|',
+                LOWER(ISNULL(endpoint_b_fqdn, '')), '|',
+                ISNULL(endpoint_b_ipv4, ''), '|',
+                LOWER(ISNULL(protocol, '')), '|',
+                ISNULL(CONVERT(nvarchar(20), service_port), '')
+            )
+        ), 2) PERSISTED,
+
+    CONSTRAINT PK_connection_edge PRIMARY KEY (id),
+    -- SQL Server does not allow dual cascade paths from managed_node to both endpoint ciid FKs.
+    -- Cleanup is handled by trigger dbo.TR_managed_node_delete_connections.
+    CONSTRAINT FK_connection_edge_a_managed_node
+        FOREIGN KEY (endpoint_a_ciid) REFERENCES dbo.managed_node(ciid),
+    CONSTRAINT FK_connection_edge_b_managed_node
+        FOREIGN KEY (endpoint_b_ciid) REFERENCES dbo.managed_node(ciid),
+    CONSTRAINT CK_connection_edge_service_port
+        CHECK (service_port IS NULL OR (service_port BETWEEN 0 AND 65535))
+);
+GO
+
+-- Prevents double-inserting the same observation on proc retry.
+CREATE UNIQUE INDEX UX_connection_edge_edge_key_observed_at
+ON dbo.connection_edge (edge_key, observed_at)
+WITH (IGNORE_DUP_KEY = ON);
+GO
+
+CREATE INDEX IX_connection_edge_edge_key
+ON dbo.connection_edge (edge_key);
+GO
+
+CREATE INDEX IX_connection_edge_observed_date
+ON dbo.connection_edge (observed_date DESC, edge_key);
+GO
+
+CREATE INDEX IX_connection_edge_endpoint_a
+ON dbo.connection_edge (endpoint_a_ipv4, protocol, service_port);
+GO
+
+CREATE INDEX IX_connection_edge_endpoint_b
+ON dbo.connection_edge (endpoint_b_ipv4, protocol, service_port);
+GO
