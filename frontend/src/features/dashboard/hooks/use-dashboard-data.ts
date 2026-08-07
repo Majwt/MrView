@@ -1,17 +1,15 @@
 import {
-  fetchDashboardMetrics,
+  fetchDashboardCards,
   fetchConnectionsHistory,
-  fetchDashboardNodes,
+  type DashboardCardMetric,
   type ConnectionHistoryPoint,
-  type DashboardMetrics,
-  type NodeRow,
 } from "@/features/dashboard/api/dashboard-api";
 import { useEffect, useMemo, useState } from "react";
 
 export function useDashboardData(customerId: number | null, enabled = true) {
-  const [stats, setStats] = useState<DashboardMetrics | null>(null);
+  const [cards, setCards] = useState<DashboardCardMetric[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(true);
   const [history, setHistory] = useState<ConnectionHistoryPoint[]>([]);
-  const [nodes, setNodes] = useState<NodeRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const metricWindowDays = 7;
@@ -20,20 +18,25 @@ export function useDashboardData(customerId: number | null, enabled = true) {
     if (!enabled) return;
 
     let cancelled = false;
+
+    setCardsLoading(true);
+    fetchDashboardCards(metricWindowDays, customerId)
+      .then((nextCards) => {
+        if (cancelled) return;
+        setCards([...nextCards].sort((a, b) => a.display_order - b.display_order));
+      })
+      .finally(() => {
+        if (!cancelled) setCardsLoading(false);
+      });
+
     Promise.resolve()
       .then(() => {
         if (!cancelled) setLoading(true);
-        return Promise.all([
-          fetchDashboardMetrics(metricWindowDays, customerId),
-          fetchConnectionsHistory(90, customerId),
-          fetchDashboardNodes(100, customerId),
-        ]);
+        return fetchConnectionsHistory(90, customerId);
       })
-      .then(([s, h, n]) => {
+      .then((h) => {
         if (cancelled) return;
-        setStats(s);
         setHistory(h);
-        setNodes(n);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -54,5 +57,5 @@ export function useDashboardData(customerId: number | null, enabled = true) {
     [history],
   );
 
-  return { stats, chartData, nodes, loading };
+  return { cards, cardsLoading, chartData, loading };
 }

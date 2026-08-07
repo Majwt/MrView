@@ -11,7 +11,7 @@ export function DashboardShell() {
   const customerId = customerIdParam == null ? null : Number(customerIdParam);
   const isValidCustomerId = customerId == null || (Number.isInteger(customerId) && customerId > 0);
   const { lastConnectionUtc } = useGraphStats();
-  const { stats, chartData, nodes, loading } = useDashboardData(customerId, isValidCustomerId);
+  const { cards, cardsLoading, chartData, loading } = useDashboardData(customerId, isValidCustomerId);
 
   if (!isValidCustomerId) {
     return <Navigate to="/dashboard" replace />;
@@ -28,7 +28,7 @@ export function DashboardShell() {
     : "No graph sample loaded yet";
 
   return (
-    <div className="flex flex-1 flex-col overflow-auto @container/main">
+    <div className="flex flex-1 flex-col overflow-x-hidden overflow-y-scroll [scrollbar-gutter:stable] @container/main">
       <div className="flex flex-col gap-4 px-4 py-4 md:gap-6 md:px-6 md:py-6">
         <section className="surface-glass enter-rise flex flex-col gap-4 rounded-2xl border border-border/70 p-5 md:flex-row md:items-end md:justify-between md:p-6">
           <div className="space-y-2">
@@ -50,9 +50,9 @@ export function DashboardShell() {
           </div>
         </section>
 
-        <SectionCards stats={stats} loading={loading} />
+        <SectionCards cards={cards} loading={cardsLoading} />
         <ChartAreaInteractive data={chartData} loading={loading} />
-        <DataTable data={nodes} />
+        <DataTable customerId={customerId} />
       </div>
     </div>
   );

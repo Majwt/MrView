@@ -3,7 +3,7 @@
 import * as React from "react"
 import {
   type ColumnDef,
-  type FilterFn,
+  type PaginationState,
   type SortingFn,
 } from "@tanstack/react-table"
 import { z } from "zod"
@@ -18,8 +18,13 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { fetchNodeDetails } from "@/api/graph-api"
-import type { NodeRow } from "@/features/dashboard/api/dashboard-api"
+import {
+  fetchDashboardNodesPage,
+  type NodeRow,
+} from "@/features/dashboard/api/dashboard-api"
 import type { GraphNode } from "@/features/graph/types"
 
 export const schema = z.object({
@@ -38,7 +43,6 @@ const columns: ColumnDef<NodeRow>[] = [
     accessorKey: "fqdn",
     header: "FQDN",
     cell: ({ row }) => <TableCellViewer item={row.original} />,
-    enableHiding: false,
   },
   {
     accessorKey: "os",
@@ -203,60 +207,92 @@ function semverSortingFn(rowA: Parameters<SortingFn<NodeRow>>[0], rowB: Paramete
   return rawA.localeCompare(rawB, undefined, { numeric: true, sensitivity: "base" })
 }
 
-const nodeGlobalFilter: FilterFn<NodeRow> = (row, _columnId, filterValue) => {
-  const q = String(filterValue ?? "").trim().toLowerCase()
-  if (!q) return true
-
-  const item = row.original
-  const firstSeen = new Date(item.first_seen)
-  const lastSeen = new Date(item.last_seen)
-  const firstSeenLabel = Number.isNaN(firstSeen.getTime())
-    ? ""
-    : firstSeen.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-  const lastSeenLabel = Number.isNaN(lastSeen.getTime())
-    ? ""
-    : lastSeen.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-
-  const searchText = [
-    item.fqdn,
-    item.os,
-    item.client,
-    item.client_version,
-    item.group_name,
-    String(item.distinct_edges),
-    item.distinct_edges.toLocaleString(),
-    String(item.connection_count),
-    item.connection_count.toLocaleString(),
-    item.first_seen,
-    item.last_seen,
-    firstSeenLabel,
-    lastSeenLabel,
-  ].join(" ").toLowerCase()
-
-  return searchText.includes(q)
-}
-
-export function DataTable({ data }: { data: NodeRow[] }) {
+export function DataTable({ customerId }: { customerId: number | null }) {
   const [globalFilter, setGlobalFilter] = React.useState("")
+  const [dedupeRows, setDedupeRows] = React.useState(false)
+  const [debouncedFilter, setDebouncedFilter] = React.useState("")
+  const [data, setData] = React.useState<NodeRow[]>([])
+  const [totalRows, setTotalRows] = React.useState(0)
+  const [loading, setLoading] = React.useState(true)
+  const [pagination, setPagination] = React.useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  })
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => {
+      setDebouncedFilter(globalFilter)
+    }, 250)
+
+    return () => window.clearTimeout(id)
+  }, [globalFilter])
+
+  React.useEffect(() => {
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+  }, [debouncedFilter, customerId])
+
+  React.useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+
+    fetchDashboardNodesPage(
+      pagination.pageIndex + 1,
+      pagination.pageSize,
+      debouncedFilter,
+      customerId,
+    )
+      .then((res) => {
+        if (cancelled) return
+        setData(res.items)
+        setTotalRows(res.total_count)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [customerId, debouncedFilter, pagination.pageIndex, pagination.pageSize])
+
+  const pageCount = Math.max(Math.ceil(totalRows / pagination.pageSize), 1)
 
   return (
     <SharedDataTable
       columns={columns}
       data={data}
-      globalFilter={globalFilter}
-      onGlobalFilterChange={setGlobalFilter}
-      globalFilterFn={nodeGlobalFilter}
+      loading={loading}
       toolbar={
-        <Input
-          placeholder="Search nodes…"
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="h-8 w-48 lg:w-64"
-        />
+        <>
+          <Input
+            placeholder="Search nodes…"
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="h-8 w-48 lg:w-64"
+          />
+          <div className="ml-1 inline-flex items-center gap-2">
+            <Switch
+              id="nodes-dedupe-toggle"
+              checked={dedupeRows}
+              onCheckedChange={setDedupeRows}
+            />
+            <Label htmlFor="nodes-dedupe-toggle" className="text-xs text-muted-foreground">
+              Dedupe visible columns
+            </Label>
+          </div>
+        </>
       }
       getRowId={(row) => row.ciid}
       initialSorting={[{ id: "connection_count", desc: true }]}
       enablePagination
+      manualPagination
+      dedupeByVisibleColumns={dedupeRows}
+      pagination={pagination}
+      onPaginationChange={setPagination}
+      pageCount={pageCount}
+      totalRows={totalRows}
       initialPageSize={25}
       paginationItemLabel="node(s)"
     />

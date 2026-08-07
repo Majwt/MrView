@@ -9,11 +9,9 @@ export type DashboardMetric = {
   percentage_change: number | null;
 };
 
-export type DashboardMetrics = {
-  distinct_edges: DashboardMetric;
-  active_nodes: DashboardMetric;
-  total_events: DashboardMetric;
-  new_connections: DashboardMetric;
+export type DashboardCardMetric = DashboardMetric & {
+  id: string;
+  display_order: number;
 };
 
 export type ConnectionHistoryPoint = {
@@ -34,6 +32,13 @@ export type NodeRow = {
   first_seen: string;
   last_seen: string;
   group_name: string;
+};
+
+export type PagedNodeRows = {
+  items: NodeRow[];
+  total_count: number;
+  page: number;
+  page_size: number;
 };
 
 function dashboardPath(path: string, customerId: number | null): string {
@@ -73,7 +78,7 @@ export function fetchNewConnectionsMetric(
 export async function fetchDashboardMetrics(
   lastDays: number,
   customerId: number | null = null,
-): Promise<DashboardMetrics> {
+): Promise<Record<string, DashboardMetric>> {
   const [distinct_edges, active_nodes, total_events, new_connections] = await Promise.all([
     fetchDistinctEdgesMetric(lastDays, customerId),
     fetchActiveNodesMetric(lastDays, customerId),
@@ -82,6 +87,13 @@ export async function fetchDashboardMetrics(
   ]);
 
   return { distinct_edges, active_nodes, total_events, new_connections };
+}
+
+export function fetchDashboardCards(
+  lastDays: number,
+  customerId: number | null = null,
+): Promise<DashboardCardMetric[]> {
+  return apiGet<DashboardCardMetric[]>(`${dashboardPath("cards", customerId)}?lastDays=${lastDays}`);
 }
 
 export function fetchConnectionsHistory(
@@ -98,4 +110,23 @@ export function fetchDashboardNodes(
   customerId: number | null = null,
 ): Promise<NodeRow[]> {
   return apiGet<NodeRow[]>(`${dashboardPath("nodes", customerId)}?limit=${limit}`);
+}
+
+export function fetchDashboardNodesPage(
+  page: number,
+  pageSize: number,
+  query: string,
+  customerId: number | null = null,
+): Promise<PagedNodeRows> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+
+  const trimmed = query.trim();
+  if (trimmed) {
+    params.set("q", trimmed);
+  }
+
+  return apiGet<PagedNodeRows>(`${dashboardPath("nodes-page", customerId)}?${params.toString()}`);
 }

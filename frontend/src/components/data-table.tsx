@@ -13,7 +13,7 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +53,12 @@ type DataTableProps<TData, TValue> = {
   hoveredRowId?: string | null;
   hoveredRowIds?: Set<string>;
   onRowHoverChange?: (rowId: string | null) => void;
+  manualPagination?: boolean;
+  pageCount?: number;
+  totalRows?: number;
+  pagination?: PaginationState;
+  onPaginationChange?: React.Dispatch<React.SetStateAction<PaginationState>>;
+  dedupeByVisibleColumns?: boolean;
 };
 
 export function DataTable<TData, TValue>({
@@ -76,21 +82,75 @@ export function DataTable<TData, TValue>({
   hoveredRowId,
   hoveredRowIds,
   onRowHoverChange,
+  manualPagination = false,
+  pageCount,
+  totalRows,
+  pagination: controlledPagination,
+  onPaginationChange: onControlledPaginationChange,
+  dedupeByVisibleColumns = false,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting ?? []);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
     () => initialColumnVisibility ?? {},
   );
-  const [pagination, setPagination] = useState<PaginationState>({
+  const [uncontrolledPagination, setUncontrolledPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: initialPageSize,
   });
+  const pagination = controlledPagination ?? uncontrolledPagination;
+  const setPagination = onControlledPaginationChange ?? setUncontrolledPagination;
   const [uncontrolledGlobalFilter, setUncontrolledGlobalFilter] = useState("");
   const globalFilter = controlledGlobalFilter ?? uncontrolledGlobalFilter;
   const setGlobalFilter = setControlledGlobalFilter ?? setUncontrolledGlobalFilter;
 
+  const effectiveData = useMemo(() => {
+    if (!dedupeByVisibleColumns || data.length <= 1) {
+      return data;
+    }
+
+    const visibleDedupeColumns = columns
+      .filter((column) => {
+        const accessorKey =
+          "accessorKey" in column && typeof column.accessorKey === "string"
+            ? column.accessorKey
+            : null;
+        if (!accessorKey) {
+          return false;
+        }
+
+        if (column.enableHiding === false) {
+          return false;
+        }
+
+        return columnVisibility[accessorKey] !== false;
+      })
+      .map((column) => (column as { accessorKey: string }).accessorKey);
+
+    if (visibleDedupeColumns.length === 0) {
+      return data;
+    }
+
+    const seen = new Set<string>();
+    const deduped: TData[] = [];
+
+    for (const row of data) {
+      const key = visibleDedupeColumns
+        .map((column) => String((row as Record<string, unknown>)[column] ?? ""))
+        .join("\u001f");
+
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      deduped.push(row);
+    }
+
+    return deduped;
+  }, [columnVisibility, columns, data, dedupeByVisibleColumns]);
+
   const table = useReactTable({
-    data,
+    data: effectiveData,
     columns,
     state: {
       sorting,
@@ -105,6 +165,8 @@ export function DataTable<TData, TValue>({
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: enablePagination ? setPagination : undefined,
+    manualPagination,
+    ...(manualPagination && pageCount !== undefined ? { pageCount } : {}),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -121,9 +183,11 @@ export function DataTable<TData, TValue>({
     .getAllColumns()
     .filter((col) => typeof col.accessorFn !== "undefined" && col.getCanHide());
 
-  const filteredCount = table.getFilteredRowModel().rows.length;
+  const clientFilteredCount = table.getFilteredRowModel().rows.length;
+  const filteredCount = manualPagination ? (totalRows ?? effectiveData.length) : clientFilteredCount;
+  const currentPageRows = manualPagination ? effectiveData.length : table.getRowModel().rows.length;
   const pageStart = filteredCount === 0 ? 0 : pagination.pageIndex * pagination.pageSize + 1;
-  const pageEnd = Math.min((pagination.pageIndex + 1) * pagination.pageSize, filteredCount);
+  const pageEnd = filteredCount === 0 ? 0 : Math.min(pageStart + currentPageRows - 1, filteredCount);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

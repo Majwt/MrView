@@ -58,6 +58,17 @@ public class DashboardController : ControllerBase
         return Results.Ok(await dashboardService.GetNewConnectionsAsync(lastDays, customerId));
     }
 
+    [HttpGet("/api/customer/{customerId:int}/dashboard/cards")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerCards(
+        int customerId,
+        [FromQuery] int? lastDays,
+        [FromServices] DashboardService dashboardService)
+    {
+        var effectiveLastDays = lastDays is > 0 ? lastDays.Value : 7;
+        return Results.Ok(await dashboardService.GetDashboardCardsAsync(effectiveLastDays, customerId));
+    }
+
 
 
 
@@ -93,6 +104,20 @@ public class DashboardController : ControllerBase
     {
         var effectiveLimit = limit is > 0 ? limit.Value : 100;
         return Results.Ok(await dashboardService.GetDashboardNodesAsync(effectiveLimit, customerId));
+    }
+
+    [HttpGet("/api/customer/{customerId:int}/dashboard/nodes-page")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IResult> GetCustomerNodesPage(
+        int customerId,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromQuery] string? q,
+        [FromServices] DashboardService dashboardService)
+    {
+        var effectivePage = page is > 0 ? page.Value : 1;
+        var effectivePageSize = pageSize is > 0 ? Math.Min(pageSize.Value, 200) : 25;
+        return Results.Ok(await dashboardService.GetDashboardNodesPageAsync(effectivePage, effectivePageSize, q, customerId));
     }
 
     [HttpGet("stats")]
@@ -189,6 +214,27 @@ public class DashboardController : ControllerBase
         return Results.Ok(await dashboardService.GetNewConnectionsAsync(lastDays, customerId));
     }
 
+    [HttpGet("cards")]
+    public async Task<IResult> GetCards(
+        [FromQuery] int? lastDays,
+        [FromServices] DashboardService dashboardService)
+    {
+        var effectiveLastDays = lastDays is > 0 ? lastDays.Value : 7;
+
+        if (User.IsInRole("Admin"))
+        {
+            return Results.Ok(await dashboardService.GetDashboardCardsAsync(effectiveLastDays));
+        }
+
+        var customerIdClaim = Jwt.CustomerIdClaim(User);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+        {
+            return Results.Forbid();
+        }
+
+        return Results.Ok(await dashboardService.GetDashboardCardsAsync(effectiveLastDays, customerId));
+    }
+
     [HttpGet("connections-history")]
     public async Task<IResult> GetConnectionsHistory(
         [FromQuery] int? days,
@@ -250,5 +296,29 @@ public class DashboardController : ControllerBase
         }
 
         return Results.Ok(await dashboardService.GetDashboardNodesAsync(effectiveLimit, customerId));
+    }
+
+    [HttpGet("nodes-page")]
+    public async Task<IResult> GetNodesPage(
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromQuery] string? q,
+        [FromServices] DashboardService dashboardService)
+    {
+        var effectivePage = page is > 0 ? page.Value : 1;
+        var effectivePageSize = pageSize is > 0 ? Math.Min(pageSize.Value, 200) : 25;
+
+        if (User.IsInRole("Admin"))
+        {
+            return Results.Ok(await dashboardService.GetDashboardNodesPageAsync(effectivePage, effectivePageSize, q));
+        }
+
+        var customerIdClaim = Jwt.CustomerIdClaim(User);
+        if (customerIdClaim == null || !int.TryParse(customerIdClaim, out var customerId))
+        {
+            return Results.Forbid();
+        }
+
+        return Results.Ok(await dashboardService.GetDashboardNodesPageAsync(effectivePage, effectivePageSize, q, customerId));
     }
 }

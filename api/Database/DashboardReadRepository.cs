@@ -48,10 +48,6 @@ public class DashboardReadRepository : IDashboardReadRepository
         {
             percentageChange = (double)(currentValue - excludingLastNDaysValue) / excludingLastNDaysValue * 100d;
         }
-        else if (currentValue > 0)
-        {
-            percentageChange = 100d;
-        }
 
         return (currentValue, excludingLastNDaysValue, percentageChange);
     }
@@ -515,5 +511,167 @@ public class DashboardReadRepository : IDashboardReadRepository
         }
 
         return rows;
+    }
+
+    public async Task<PagedResult<NodeRow>> GetDashboardNodesPageAsync(int page, int pageSize, string? query, int customerId = -1)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var customerFilter = customerId != -1 ? "AND n.group_id = @CustomerId" : "";
+        var customerEdgeAggFilter = customerId != -1
+            ? $"AND EXISTS (SELECT 1 FROM {_nodesTable} nc WHERE nc.group_id = @CustomerId AND (nc.ciid = e.endpoint_a_ciid OR nc.ciid = e.endpoint_b_ciid))"
+            : "";
+
+        var hasQuery = !string.IsNullOrWhiteSpace(query);
+        var searchFilter = hasQuery
+            ? """
+              AND (
+                  LOWER(COALESCE(nr.fqdn, '')) LIKE @Search
+               OR LOWER(COALESCE(nr.hostname, '')) LIKE @Search
+               OR LOWER(COALESCE(nr.os_version, '')) LIKE @Search
+               OR LOWER(COALESCE(nr.client_name, '')) LIKE @Search
+               OR LOWER(COALESCE(nr.client_version, '')) LIKE @Search
+               OR LOWER(COALESCE(nr.group_name, '')) LIKE @Search
+               OR CONVERT(varchar(40), nr.distinct_edges) LIKE @Search
+               OR CONVERT(varchar(40), nr.connection_count) LIKE @Search
+               OR CONVERT(varchar(19), nr.first_seen, 120) LIKE @Search
+               OR CONVERT(varchar(19), nr.last_seen, 120) LIKE @Search
+              )
+              """
+            : "";
+
+        var sql = $"""
+            WITH edge_agg AS (
+                SELECT
+                    node_ciid,
+                    edge_count       = COUNT_BIG(*),
+                    connection_count = SUM(seen_count)
+                FROM (
+                    SELECT e.endpoint_a_ciid AS node_ciid, e.edge_key, e.seen_count
+                    FROM {_edgeStatsView} e
+                    WHERE e.seen_count > @SeenCountThreshold
+                      {customerEdgeAggFilter}
+
+                    UNION ALL
+
+                    SELECT e.endpoint_b_ciid AS node_ciid, e.edge_key, e.seen_count
+                    FROM {_edgeStatsView} e
+                    WHERE e.seen_count > @SeenCountThreshold
+                      AND e.endpoint_b_ciid <> e.endpoint_a_ciid
+                      {customerEdgeAggFilter}
+                ) x
+                WHERE node_ciid IS NOT NULL
+                GROUP BY node_ciid
+            ),
+            node_rows AS (
+                SELECT
+                    n.ciid,
+                    fqdn       = COALESCE(n.fqdn, n.ciid),
+                    hostname   = CASE
+                                     WHEN CHARINDEX('.', COALESCE(n.fqdn, '')) > 0
+                                     THEN LEFT(n.fqdn, CHARINDEX('.', n.fqdn) - 1)
+                                     ELSE COALESCE(n.fqdn, n.ciid)
+                                 END,
+                    distinct_edges   = COALESCE(ea.edge_count, 0),
+                    connection_count = COALESCE(ea.connection_count, 0),
+                    n.os_version,
+                    n.client_name,
+                    n.client_version,
+                    n.first_seen,
+                    n.last_seen,
+                    group_name = COALESCE(n.group_name, '')
+                FROM {_nodesTable} n
+                LEFT JOIN edge_agg ea ON ea.node_ciid = n.ciid
+                WHERE 1=1
+                  {customerFilter}
+                        ),
+                        filtered_rows AS (
+                                SELECT
+                                        nr.ciid,
+                                        nr.fqdn,
+                                        nr.hostname,
+                                        nr.distinct_edges,
+                                        nr.connection_count,
+                                        nr.os_version,
+                                        nr.client_name,
+                                        nr.client_version,
+                                        nr.first_seen,
+                                        nr.last_seen,
+                                        nr.group_name
+                                FROM node_rows nr
+                                WHERE 1=1
+                                    {searchFilter}
+            )
+            SELECT
+                                fr.ciid,
+                                fr.fqdn,
+                                fr.hostname,
+                                fr.distinct_edges,
+                                fr.connection_count,
+                                fr.os_version,
+                                fr.client_name,
+                                fr.client_version,
+                                fr.first_seen,
+                                fr.last_seen,
+                                fr.group_name,
+                                total_count = COUNT_BIG(*) OVER ()
+                        FROM filtered_rows fr
+                        ORDER BY fr.connection_count DESC, fr.fqdn ASC
+            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+            """;
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@SeenCountThreshold", _seenCountThreshold);
+        command.Parameters.AddWithValue("@Offset", (page - 1) * pageSize);
+        command.Parameters.AddWithValue("@PageSize", pageSize);
+
+        if (customerId != -1)
+        {
+            command.Parameters.AddWithValue("@CustomerId", customerId);
+        }
+
+        if (hasQuery)
+        {
+            command.Parameters.AddWithValue("@Search", $"%{query!.Trim().ToLowerInvariant()}%");
+        }
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        long totalCount = 0;
+
+        var rows = new List<NodeRow>();
+        var ciidOrdinal = reader.GetOrdinal("ciid");
+        var fqdnOrdinal = reader.GetOrdinal("fqdn");
+        var hostnameOrdinal = reader.GetOrdinal("hostname");
+        var osVersionOrdinal = reader.GetOrdinal("os_version");
+        var clientNameOrdinal = reader.GetOrdinal("client_name");
+        var clientVersionOrdinal = reader.GetOrdinal("client_version");
+        var edgesOrdinal = reader.GetOrdinal("distinct_edges");
+        var connectionOrdinal = reader.GetOrdinal("connection_count");
+        var firstSeenOrdinal = reader.GetOrdinal("first_seen");
+        var lastSeenOrdinal = reader.GetOrdinal("last_seen");
+        var groupNameOrdinal = reader.GetOrdinal("group_name");
+        var totalCountOrdinal = reader.GetOrdinal("total_count");
+
+        while (await reader.ReadAsync())
+        {
+            totalCount = reader.GetInt64(totalCountOrdinal);
+            rows.Add(new NodeRow(
+                Ciid: reader.GetString(ciidOrdinal),
+                Fqdn: reader.GetString(fqdnOrdinal),
+                Os: reader.IsDBNull(osVersionOrdinal) ? "Unknown" : reader.GetString(osVersionOrdinal),
+                Client: reader.IsDBNull(clientNameOrdinal) ? "Unknown" : reader.GetString(clientNameOrdinal),
+                ClientVersion: reader.IsDBNull(clientVersionOrdinal) ? "Unknown" : reader.GetString(clientVersionOrdinal),
+                Hostname: reader.GetString(hostnameOrdinal),
+                DistinctEdges: reader.GetInt64(edgesOrdinal),
+                ConnectionCount: reader.GetInt64(connectionOrdinal),
+                FirstSeen: EnsureUtc(reader.GetDateTime(firstSeenOrdinal)),
+                LastSeen: EnsureUtc(reader.GetDateTime(lastSeenOrdinal)),
+                GroupName: reader.GetString(groupNameOrdinal)
+            ));
+        }
+
+        return new PagedResult<NodeRow>(rows, totalCount, page, pageSize);
     }
 }
