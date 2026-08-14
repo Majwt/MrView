@@ -1,4 +1,4 @@
-import { fetchGraphSnapshot, fetchGraphDelta, fetchNodeDetails, fetchFilteredCiids, type GraphQueryParams, type NodeFilterParams } from "@/api/graph-api";
+import { fetchGraphSnapshot, fetchGraphDelta, fetchNodeDetails, fetchNodePorts, fetchFilteredCiids, type GraphQueryParams, type NodeFilterParams } from "@/api/graph-api";
 import { applyGlobalSearch } from "@/features/filters/apply-global-search";
 import { applyGraphFilters } from "@/features/filters/apply-graph-filters";
 import { buildFilterSuggestions } from "@/features/filters/filter-suggestions";
@@ -11,6 +11,7 @@ import { normalizeGraphSnapshot } from "@/features/graph/normalize-graph-snapsho
 import type { GraphNode, GraphSnapshot } from "@/features/graph/types";
 import { X, PanelRight, PanelBottom } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
+import type { OpenPort } from "@/features/graph/types";
 import NodeDetailsPanel from "@/components/node-details-panel";
 import FilterBar from "./filter-bar";
 import GraphQuickFilters, { type QuickFilters } from "./graph-quick-filters";
@@ -26,8 +27,8 @@ import type { GraphCursor } from "@/features/graph/types";
 
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 1 minutes
-const GRAPH_CURSOR_STORAGE_KEY_PREFIX = "graph.cursor";
-const GRAPH_SNAPSHOT_STORAGE_KEY_PREFIX = "graph.snapshot";
+const GRAPH_CURSOR_STORAGE_KEY_PREFIX = "graph.cursor.v2";
+const GRAPH_SNAPSHOT_STORAGE_KEY_PREFIX = "graph.snapshot.v2";
 const GRAPH_SNAPSHOT_MAX_AGE_MS = 5 * 60 * 1000;
 
 function getGraphCursorStorageKey(customerId: string | undefined): string {
@@ -153,11 +154,14 @@ export default function GraphPage() {
   const [quickFilters, setQuickFilters] = useState<QuickFilters>(initialUrlState.quickFilters);
 
   const [isLoadingNodeDetails, setIsLoadingNodeDetails] = useState(false);
+  const [selectedNodePorts, setSelectedNodePorts] = useState<OpenPort[] | null>(null);
   const nodeDetailsCacheRef = useRef(new Map<string, Partial<GraphNode>>());
+  const nodePortsCacheRef = useRef(new Map<string, OpenPort[]>());
   const nodeDetailsInFlightRef = useRef(new Set<string>());
   const hoveredNodeFqdnRef = useRef<string | null>(null);
   const [hoveredNodeDetails, setHoveredNodeDetails] = useState<Partial<GraphNode> | null>(null);
   const snapshotRef = useRef(snapshot);
+  const snapshotReady = !!snapshot;
   useEffect(() => { snapshotRef.current = snapshot; }, [snapshot]);
   useEffect(() => { hoveredNodeFqdnRef.current = hoveredNodeFqdn; }, [hoveredNodeFqdn]);
   const quickFiltersRef = useRef(quickFilters);
@@ -358,13 +362,20 @@ export default function GraphPage() {
             .filter((e) => removedFqdns.has(e.source_fqdn) || removedFqdns.has(e.target_fqdn) || !newEdgeIds.has(e.id))
             .map((e) => e.id);
 
-          return applyGraphDelta(current, {
+          const applied = applyGraphDelta(current, {
             cursor: data.cursor,
             upsert_nodes: data.upsert_nodes,
             upsert_edges: data.upsert_edges,
             remove_node_ids: [...removedFqdns],
             remove_edge_ids: removeEdgeIds,
           });
+          return {
+            ...applied,
+            nodes: applied.nodes.map((n) => {
+              const cached = n.ciid ? nodeDetailsCacheRef.current.get(n.ciid) : undefined;
+              return cached ? { ...n, ...cached } : n;
+            }),
+          };
         });
 
       } catch (error) {
@@ -401,9 +412,14 @@ export default function GraphPage() {
 
         setSnapshot((current) => {
           if (!current) return current;
-
           const newData = applyGraphDelta(current, delta);
-          return newData;
+          return {
+            ...newData,
+            nodes: newData.nodes.map((n) => {
+              const cached = n.ciid ? nodeDetailsCacheRef.current.get(n.ciid) : undefined;
+              return cached ? { ...n, ...cached } : n;
+            }),
+          };
         });
       } catch (error) {
         console.error("Failed to fetch graph delta", error);
@@ -456,12 +472,26 @@ export default function GraphPage() {
 
   // Lazy-load node details when a managed node is selected (also drives the loading indicator)
   useEffect(() => {
-    if (!selectedNodeFqdn) return;
+    if (!selectedNodeFqdn) {
+      setSelectedNodePorts(null);
+      return;
+    }
     const current = snapshotRef.current;
     if (!current) return;
     const node = current.nodes.find((n) => n.fqdn === selectedNodeFqdn);
-    if (!node || node.is_placeholder || !node.ciid || node.customer !== undefined) return;
+    if (!node || node.is_placeholder || !node.ciid) return;
     const ciid = node.ciid;
+
+    const cachedPorts = nodePortsCacheRef.current.get(ciid);
+    if (cachedPorts) {
+      setSelectedNodePorts(cachedPorts);
+    } else {
+      fetchNodePorts(ciid)
+        .then((ports) => { nodePortsCacheRef.current.set(ciid, ports); setSelectedNodePorts(ports); })
+        .catch((err) => console.error("Failed to fetch node ports", err));
+    }
+
+    if (node.customer !== undefined) return;
     const cached = nodeDetailsCacheRef.current.get(ciid);
     if (cached) {
       setSnapshot((s) =>
@@ -479,9 +509,7 @@ export default function GraphPage() {
       })
       .catch((err) => console.error("Failed to fetch node details", err))
       .finally(() => setIsLoadingNodeDetails(false));
-  }, [selectedNodeFqdn]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Pre-fetch details on hover so the tooltip can show ciid immediately
+  }, [selectedNodeFqdn, snapshotReady]); // eslint-disable-line react-hooks/exhaustive-deps so the tooltip can show ciid immediately
   useEffect(() => {
     if (!hoveredNodeFqdn) {
       setHoveredNodeDetails(null);
@@ -676,6 +704,7 @@ export default function GraphPage() {
                   <NodeDetailsPanel
                     node={selectedNode}
                     isLoadingDetails={isLoadingNodeDetails}
+                    ports={selectedNodePorts}
                     onBack={() => startTransition(() => setSelectedNodeFqdn(null))}
                   />
                 ) : (

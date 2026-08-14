@@ -4,9 +4,9 @@ GO
 -- ============================================================
 -- 1. v_connection_stats aggregation (highest impact)
 --
--- The view does: GROUP BY edge_key, MAX(id), MIN/MAX(observed_date)
--- Without INCLUDEs, every row requires a key lookup for id and
--- observed_date. With INCLUDEs the whole GROUP BY is index-only.
+-- The view does: GROUP BY stats_key (computed from edge_key inputs),
+-- MAX(id), MIN/MAX(observed_at). Without INCLUDEs, every row requires
+-- a key lookup. With INCLUDEs the whole aggregation is index-only.
 -- ============================================================
 DROP INDEX IF EXISTS IX_connection_edge_edge_key ON dbo.connection_edge;
 GO
@@ -14,7 +14,7 @@ GO
 -- endpoint_a/b_ciid added so edge_agg queries on connection_edge are index-only (no key lookups)
 CREATE INDEX IX_connection_edge_edge_key
 ON dbo.connection_edge (edge_key)
-INCLUDE (id, observed_date, endpoint_a_ciid, endpoint_b_ciid);
+INCLUDE (id, observed_date, endpoint_a_ciid, endpoint_b_ciid, confidence, endpoint_b_process_name, service_port);
 GO
 
 -- ============================================================

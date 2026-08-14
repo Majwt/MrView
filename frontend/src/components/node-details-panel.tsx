@@ -1,5 +1,5 @@
 import { CopyButton } from "@/components/ui/copy-button";
-import type { GraphSnapshot } from "@/features/graph/types";
+import type { GraphSnapshot, OpenPort } from "@/features/graph/types";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { RichDateCell } from "@/features/graph/ui/table/styled-cells";
@@ -7,10 +7,12 @@ import { RichDateCell } from "@/features/graph/ui/table/styled-cells";
 export default function NodeDetailsPanel({
   node,
   isLoadingDetails,
+  ports,
   onBack,
 }: {
   node: NonNullable<GraphSnapshot["nodes"][number]>;
   isLoadingDetails?: boolean;
+  ports?: OpenPort[] | null;
   onBack: () => void;
 }) {
   const hasCustomer = node.customer !== undefined;
@@ -155,8 +157,83 @@ export default function NodeDetailsPanel({
         </div>
       ) : null}
 
+      {/* Open Ports */}
+      {ports && ports.length > 0 ? (
+        <div>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            TCP Listen & UDP
+          </h3>
+          <div className="rounded-md border bg-muted/20 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">Proto</th>
+                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">Local</th>
+                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">Port</th>
+                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">Foreign</th>
+                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">F.Port</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compactPorts(ports).map((p, i) => (
+                  <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                    <td className="px-2 py-0.5 text-muted-foreground">{p.proto ?? ""}</td>
+                    <td className="px-2 py-0.5 font-mono text-[11px]">{p.local_ip ?? ""}</td>
+                    {p.range_end != null ? (
+                      <>
+                        <td className="px-2 py-0.5 font-mono">{p.local_port}–{p.range_end} <span className="text-muted-foreground">({p.range_count}{p.pid != null ? `, pid ${p.pid}` : ""})</span></td>
+                        <td className="px-2 py-0.5 font-mono text-[11px] text-muted-foreground">{p.foreign_ip ?? ""}</td>
+                        <td className="px-2 py-0.5 font-mono text-muted-foreground">{p.foreign_port ?? ""}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-2 py-0.5 font-mono">{p.local_port ?? ""}</td>
+                        <td className="px-2 py-0.5 font-mono text-[11px] text-muted-foreground">{p.foreign_ip ?? ""}</td>
+                        <td className="px-2 py-0.5 font-mono text-muted-foreground">{p.foreign_port ?? ""}</td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
     </div>
   );
+}
+
+type CompactedPort = OpenPort & { range_end?: string; range_count?: number };
+
+function compactPorts(ports: OpenPort[]): CompactedPort[] {
+  const sorted = [...ports].sort((a, b) => {
+    const ip = (a.local_ip ?? "").localeCompare(b.local_ip ?? "");
+    if (ip !== 0) return ip;
+    return (parseInt(a.local_port ?? "0") || 0) - (parseInt(b.local_port ?? "0") || 0);
+  });
+  const result: CompactedPort[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    const start = sorted[i];
+    let j = i + 1;
+    while (
+      j < sorted.length &&
+      sorted[j].proto === start.proto &&
+      sorted[j].local_ip === start.local_ip &&
+      sorted[j].pid != null && sorted[j].pid === start.pid &&
+      (parseInt(sorted[j].local_port ?? "0") || 0) === (parseInt(sorted[j - 1].local_port ?? "0") || 0) + 1
+    ) j++;
+    const count = j - i;
+    if (count > 5) {
+      result.push({ ...start, range_end: sorted[j - 1].local_port ?? undefined, range_count: count });
+      i = j;
+    } else {
+      result.push(start);
+      i++;
+    }
+  }
+  return result;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {

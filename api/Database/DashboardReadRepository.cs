@@ -204,11 +204,11 @@ public class DashboardReadRepository : IDashboardReadRepository
 
         var sql = $"""
             SELECT
-                current_value = COUNT_BIG(CASE WHEN e.observed_date >= CAST(DATEADD(DAY, -@LastDays, GETUTCDATE()) AS date) THEN 1 END),
-                excluding_last_n_days_value = COUNT_BIG(CASE WHEN e.observed_date >= CAST(DATEADD(DAY, -(@LastDays * 2), GETUTCDATE()) AS date)
-                                                            AND e.observed_date < CAST(DATEADD(DAY, -@LastDays, GETUTCDATE()) AS date)
+                current_value = COUNT_BIG(CASE WHEN e.first_seen >= DATEADD(DAY, -@LastDays, GETUTCDATE()) THEN 1 END),
+                excluding_last_n_days_value = COUNT_BIG(CASE WHEN e.first_seen >= DATEADD(DAY, -(@LastDays * 2), GETUTCDATE())
+                                                            AND e.first_seen < DATEADD(DAY, -@LastDays, GETUTCDATE())
                                                         THEN 1 END)
-            FROM {_edgesTable} e
+            FROM {_edgeStatsView} e
             {customerJoin}
             WHERE 1=1 {customerFilter};
             """;

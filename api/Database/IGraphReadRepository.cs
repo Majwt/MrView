@@ -11,6 +11,7 @@ public interface IGraphReadRepository
     Task<IEnumerable<NodeSummaryEntity>> getNodeSummariesAsync(GraphCursor cursor, GraphQueryParams queryParams);
     Task<IEnumerable<NodeSummaryEntity>> getCustomerNodeSummariesAsync(GraphCursor cursor, int customerId, GraphQueryParams queryParams);
     Task<NodeEntity?> getNodeByCiidAsync(string ciid);
+    Task<IEnumerable<OpenPort>> getNodePortsAsync(string ciid);
     Task<IEnumerable<string>> filterNodeCiidsAsync(
         string? customer,
         string? ip,

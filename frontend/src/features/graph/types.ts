@@ -1,6 +1,15 @@
 
 import * as d3 from "d3";
 
+export type OpenPort = {
+  proto: string | null;
+  local_ip: string | null;
+  local_port: string | null;
+  foreign_ip: string | null;
+  foreign_port: string | null;
+  pid: number | null;
+};
+
 export type Customer = {
   name: string;
   cmdb_ci_id: string;

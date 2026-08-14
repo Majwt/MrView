@@ -56,9 +56,9 @@ CREATE TABLE dbo.connection_edge (
 );
 GO
 
--- Prevents double-inserting the same observation on proc retry.
-CREATE UNIQUE INDEX UX_connection_edge_edge_key_observed_at
-ON dbo.connection_edge (edge_key, observed_at)
+-- Prevents inserting two rows for the same observed occurrence on the same day.
+CREATE UNIQUE INDEX UX_connection_edge_edge_key_observed_date
+ON dbo.connection_edge (edge_key, endpoint_a_port, endpoint_b_port, observed_date)
 WITH (IGNORE_DUP_KEY = ON);
 GO
 

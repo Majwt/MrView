@@ -128,6 +128,31 @@ public class GraphController(ILogger<GraphController> logger) : ControllerBase
         return Results.Ok(details);
     }
 
+    [HttpGet("api/node/ports")]
+    [Authorize]
+    public async Task<IResult> GetNodePorts(
+        [FromQuery] string ciid,
+        [FromServices] GraphService graphService)
+    {
+        if (string.IsNullOrWhiteSpace(ciid))
+            return Results.BadRequest("ciid is required");
+
+        if (!User.IsInRole("Admin"))
+        {
+            var node = await graphService.GetNodeDetailsAsync(ciid);
+            if (node is null) return Results.NotFound();
+            var customerIdClaim = Jwt.CustomerIdClaim(User);
+            if (customerIdClaim == null
+                || !long.TryParse(customerIdClaim, out var customerId)
+                || node.Customer.Id != customerId)
+            {
+                return Results.Forbid();
+            }
+        }
+
+        return Results.Ok(await graphService.GetNodePortsAsync(ciid));
+    }
+
     [HttpGet("api/nodes/filter")]
     [Authorize]
     public async Task<IResult> FilterNodes(

@@ -196,19 +196,16 @@ BEGIN
             WHERE mw.destination_alias = fw.destination_alias
         )
     )
+    -- update only endpoint_b_ciid; endpoint_b_fqdn is part of the persisted edge_key and must not be mutated
     UPDATE ce
     SET
-        ce.endpoint_b_fqdn = w.node_fqdn,
         ce.endpoint_b_ciid = w.node_ciid
     FROM dbo.connection_edge ce
     INNER JOIN winners w
         ON w.destination_alias = LOWER(LTRIM(RTRIM(ce.endpoint_b_fqdn)))
     WHERE NULLIF(LTRIM(RTRIM(ce.endpoint_b_fqdn)), '') IS NOT NULL
       AND ce.endpoint_b_fqdn NOT LIKE '%.%'
-      AND (
-            LOWER(LTRIM(RTRIM(ce.endpoint_b_fqdn))) <> w.node_fqdn
-         OR ISNULL(ce.endpoint_b_ciid, '') <> ISNULL(w.node_ciid, '')
-      );
+      AND ISNULL(ce.endpoint_b_ciid, '') <> ISNULL(w.node_ciid, '');
 
     SET @updated_rows = @@ROWCOUNT;
 

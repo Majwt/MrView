@@ -75,6 +75,9 @@ public class GraphService
         return ToNodeDto(entity);
     }
 
+    public Task<IEnumerable<OpenPort>> GetNodePortsAsync(string ciid)
+        => _graphRepository.getNodePortsAsync(ciid);
+
     public async Task<IEnumerable<string>> FilterNodeCiidsAsync(
         string? customer, string? ip, string? mac,
         DateTime? firstSeenAfter, DateTime? firstSeenBefore,

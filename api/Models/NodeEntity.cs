@@ -1,5 +1,14 @@
 namespace Api.Models;
 
+public sealed record OpenPort(
+    string? Proto,
+    string? LocalIp,
+    string? LocalPort,
+    string? ForeignIp,
+    string? ForeignPort,
+    int? Pid
+);
+
 public sealed record NodeSummaryEntity(
     long NodeId,
     string Ciid,

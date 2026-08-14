@@ -9,6 +9,7 @@ public sealed class DatabaseOptions
     public required string NodeTable { get; init; }
     public required string InterfaceTable { get; init; }
     public required string PortsTable { get; init; }
+    public required string NodePortTable { get; init; }
     public required int SeenCountThreshold { get; init; }
 
     private static readonly Regex TableRegex = new(
@@ -28,9 +29,11 @@ public sealed class DatabaseOptions
         Console.WriteLine($"InterfaceTable: {InterfaceTable}, Valid: {InterfaceTableValid}");
         bool PortsTableValid = TableRegex.IsMatch(PortsTable);
         Console.WriteLine($"PortsTable: {PortsTable}, Valid: {PortsTableValid}");
+        bool NodePortTableValid = TableRegex.IsMatch(NodePortTable);
+        Console.WriteLine($"NodePortTable: {NodePortTable}, Valid: {NodePortTableValid}");
         bool SeenCountThresholdValid = SeenCountThreshold >= 0;
         Console.WriteLine($"SeenCountThreshold: {SeenCountThreshold}, Valid: {SeenCountThresholdValid}");
 
-        return EdgeTableValid && EdgeStatsViewValid && NodeTableValid && InterfaceTableValid && PortsTableValid && SeenCountThresholdValid;
+        return EdgeTableValid && EdgeStatsViewValid && NodeTableValid && InterfaceTableValid && PortsTableValid && NodePortTableValid && SeenCountThresholdValid;
     }
 }

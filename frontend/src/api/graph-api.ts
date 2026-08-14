@@ -1,5 +1,5 @@
 import { apiGet } from "@/api/client";
-import type { GraphCursor, GraphDelta, GraphNode } from "@/features/graph/types";
+import type { GraphCursor, GraphDelta, GraphNode, OpenPort } from "@/features/graph/types";
 
 export type GraphQueryParams = {
   excludeIsolated?: boolean;
@@ -46,6 +46,10 @@ export function fetchGraphDelta(cursor: GraphCursor, customerId: number | null, 
 
 export function fetchNodeDetails(ciid: string): Promise<GraphNode> {
   return apiGet<GraphNode>(`/node?ciid=${encodeURIComponent(ciid)}`);
+}
+
+export function fetchNodePorts(ciid: string): Promise<OpenPort[]> {
+  return apiGet<OpenPort[]>(`/node/ports?ciid=${encodeURIComponent(ciid)}`);
 }
 
 export function fetchFilteredCiids(filterParams: NodeFilterParams): Promise<string[]> {

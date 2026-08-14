@@ -12,6 +12,7 @@ public class GraphReadRepository : IGraphReadRepository
     private readonly TableIdentifier _edgeStatsView;
     private readonly TableIdentifier _interfacesTable;
     private readonly TableIdentifier _portsTable;
+    private readonly TableIdentifier _nodePortTable;
     private readonly int _seenCountThreshold;
 
     public GraphReadRepository(IConfiguration configuration, IOptions<DatabaseOptions> options)
@@ -27,6 +28,7 @@ public class GraphReadRepository : IGraphReadRepository
         _edgeStatsView = TableIdentifier.Parse(dbOptions.EdgeStatsView);
         _interfacesTable = TableIdentifier.Parse(dbOptions.InterfaceTable);
         _portsTable = TableIdentifier.Parse(dbOptions.PortsTable);
+        _nodePortTable = TableIdentifier.Parse(dbOptions.NodePortTable);
         _seenCountThreshold = dbOptions.SeenCountThreshold;
     }
 
@@ -149,6 +151,10 @@ public class GraphReadRepository : IGraphReadRepository
                 e.last_seen,
                 e.edge_key
             FROM {_edgeStatsView} e
+            LEFT JOIN {_nodesTable} na
+                ON na.ciid = e.endpoint_a_ciid
+            LEFT JOIN {_nodesTable} nb
+                ON nb.ciid = e.endpoint_b_ciid
             OUTER APPLY (
                 SELECT TOP (1)
                     p.service_name
@@ -157,10 +163,6 @@ public class GraphReadRepository : IGraphReadRepository
                   AND (p.protocol = e.protocol OR p.protocol = 'any')
                 ORDER BY CASE WHEN p.protocol = e.protocol THEN 0 ELSE 1 END
             ) ps
-            LEFT JOIN {_nodesTable} na
-                ON na.ciid = e.endpoint_a_ciid
-            LEFT JOIN {_nodesTable} nb
-                ON nb.ciid = e.endpoint_b_ciid
             WHERE e.seen_count > @SeenCountThreshold
               AND (
                     na.group_id = @CustomerId
@@ -215,7 +217,9 @@ public class GraphReadRepository : IGraphReadRepository
                     e.endpoint_a_ipv4,
                     e.endpoint_b_ipv4,
                     e.seen_count,
-                    e.first_seen
+                    e.first_seen,
+                    e.last_seen,
+                    e.edge_key
                 FROM {_edgeStatsView} e
                 LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
                 LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
@@ -239,16 +243,14 @@ public class GraphReadRepository : IGraphReadRepository
                 service_name            = CAST(NULL AS nvarchar(100)),
                 seen_count              = SUM(b.seen_count),
                 first_seen              = MIN(b.first_seen),
-                last_seen               = MIN(b.first_seen),
-                edge_key                = CONVERT(nvarchar(64), HASHBYTES('SHA2_256',
-                                              LOWER(b.a_fqdn) + '|' + LOWER(b.b_fqdn)
-                                          ), 2)
+                last_seen               = MAX(b.last_seen),
+                edge_key                = MIN(b.edge_key)
             FROM base b
             GROUP BY b.a_fqdn, b.b_fqdn
             HAVING
-                MIN(b.first_seen) > @LastSeen
-                OR (MIN(b.first_seen) = @LastSeen AND MAX(b.id) > @LastId)
-            ORDER BY MIN(b.first_seen), MAX(b.id);
+                MAX(b.last_seen) > @LastSeen
+                OR (MAX(b.last_seen) = @LastSeen AND MAX(b.id) > @LastId)
+            ORDER BY MAX(b.last_seen), MAX(b.id);
             """;
 
         await using var command = new SqlCommand(sql, connection);
@@ -287,7 +289,9 @@ public class GraphReadRepository : IGraphReadRepository
                     e.endpoint_a_ipv4,
                     e.endpoint_b_ipv4,
                     e.seen_count,
-                    e.first_seen
+                    e.first_seen,
+                    e.last_seen,
+                    e.edge_key
                 FROM {_edgeStatsView} e
                 LEFT JOIN {_nodesTable} na ON na.ciid = e.endpoint_a_ciid
                 LEFT JOIN {_nodesTable} nb ON nb.ciid = e.endpoint_b_ciid
@@ -312,16 +316,14 @@ public class GraphReadRepository : IGraphReadRepository
                 service_name            = CAST(NULL AS nvarchar(100)),
                 seen_count              = SUM(b.seen_count),
                 first_seen              = MIN(b.first_seen),
-                last_seen               = MIN(b.first_seen),
-                edge_key                = CONVERT(nvarchar(64), HASHBYTES('SHA2_256',
-                                              LOWER(b.a_fqdn) + '|' + LOWER(b.b_fqdn)
-                                          ), 2)
+                last_seen               = MAX(b.last_seen),
+                edge_key                = MIN(b.edge_key)
             FROM base b
             GROUP BY b.a_fqdn, b.b_fqdn
             HAVING
-                MIN(b.first_seen) > @LastSeen
-                OR (MIN(b.first_seen) = @LastSeen AND MAX(b.id) > @LastId)
-            ORDER BY MIN(b.first_seen), MAX(b.id);
+                MAX(b.last_seen) > @LastSeen
+                OR (MAX(b.last_seen) = @LastSeen AND MAX(b.id) > @LastId)
+            ORDER BY MAX(b.last_seen), MAX(b.id);
             """;
 
         await using var command = new SqlCommand(sql, connection);
@@ -668,6 +670,50 @@ public class GraphReadRepository : IGraphReadRepository
             await using var ifaceReader = await ifaceCmd.ExecuteReaderAsync();
             return node with { Interfaces = await ParseInterfacesFromReader(ifaceReader) };
         }
+    }
+
+    public async Task<IEnumerable<OpenPort>> getNodePortsAsync(string ciid)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var sql = $"""
+            SELECT TOP 200
+                proto,
+                local_ip,
+                local_port,
+                foreign_ip,
+                foreign_port,
+                pid = MAX(pid)
+            FROM {_nodePortTable}
+            WHERE ciid = @Ciid
+              AND [current] = 1
+              AND CAST(date_created AS date) = (
+                  SELECT MAX(CAST(date_created AS date))
+                  FROM {_nodePortTable}
+                  WHERE ciid = @Ciid AND [current] = 1
+              )
+            GROUP BY proto, local_ip, local_port, foreign_ip, foreign_port
+            ORDER BY local_ip, proto, TRY_CAST(local_port AS int)
+            """;
+
+        await using var cmd = new SqlCommand(sql, connection);
+        cmd.Parameters.AddWithValue("@Ciid", ciid);
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        var ports = new List<OpenPort>();
+        while (await reader.ReadAsync())
+        {
+            ports.Add(new OpenPort(
+                reader.IsDBNull(0) ? null : reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetInt32(5)
+            ));
+        }
+        return ports;
     }
 
     public async Task<IEnumerable<string>> filterNodeCiidsAsync(
